@@ -195,7 +195,7 @@ mk::main() {
 
         cmake ../../sources $VERBOSE_FLAG -DCMAKE_BUILD_TYPE=Debug -DVERBOSE=$VERBOSE $PROPS
     else
-        cmake ../sources
+        cmake ../sources $VERBOSE_FLAG -DVERBOSE=$VERBOSE $PROPS
     fi
     if [[ $? -ne 0 ]]; then
         mk::fail "FAILED(Generate)\n"
