@@ -125,19 +125,19 @@ mk::parse_args() {
 
     while [[ "$#" > 0 ]]; do case $1 in
     -h|--help) mk::help;;
-	-v|--verbose) VERBOSE=1;;
+    -v|--verbose) VERBOSE=1;;
     --platform) PLATFORM=$2; shift;;
     --only) ONLY=$2; shift;;
     --cleanup) DOCLEANUP=1;;
     --test) DOTESTING=1;;
     --prefix) PREFIX=$2; _defaultPrefix=0; shift;;
     --build-type) BUILD_TYPE=$2; _defaultBuildType=0; shift;;
-	*) echo "Unknown parameter passed: $1" >&2; exit 1;;
-	esac; shift; done
+    *) echo "Unknown parameter passed: $1" >&2; exit 1;;
+    esac; shift; done
 
     if [[ $VERBOSE -eq 1 ]]; then
-		mk::debug "VERBOSE mode is ON\n"
-	fi
+        mk::debug "VERBOSE mode is ON\n"
+    fi
 
     if [[ $_defaultPrefix -eq 1 ]]; then
         # reset prefix to the default value since root folder might be changed
