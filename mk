@@ -1,5 +1,16 @@
 #!/bin/bash
 
+# CHANGELOG
+#
+# v1.0.1
+# - Add beautiful version printing flag
+# - Add self-update flag
+#
+# v1.0.0
+# - Implement basic functionality: generate using cmake, build, test
+
+VERSION="1.0.1"
+
 PLATFORM="auto"
 OLDWD=$(pwd)
 
@@ -91,6 +102,8 @@ mk::help() {
     echo "  --test                           = perform testing (performs build if needed)"
     echo "  --only <target-name>             = perform testing for the selected build target"
     echo "  --build-type <type>              = set build type: Release(default), Debug, RelWithDebInfo, MinSizeRel"
+    echo "  --update-self                    = update this mk script and exit"
+    echo "  --version                        = show version and exit"
     echo ""
     echo "Examples:"
     echo ""
@@ -105,6 +118,8 @@ DOCLEANUP=0
 DOTESTING=0
 ONLY=""
 BUILD_TYPE="Release"
+DOUPDATE=0
+DOVERSION=0
 
 
 mk::parse_args() {
@@ -132,6 +147,8 @@ mk::parse_args() {
     --test) DOTESTING=1;;
     --prefix) PREFIX=$2; _defaultPrefix=0; shift;;
     --build-type) BUILD_TYPE=$2; _defaultBuildType=0; shift;;
+    --update-self) DOUPDATE=1;;
+    --version) DOVERSION=1;;
     *) echo "Unknown parameter passed: $1" >&2; exit 1;;
     esac; shift; done
 
@@ -157,6 +174,30 @@ mk::parse_args() {
 mk::main() {
 
     mk::parse_args $@
+
+    if [[ $DOVERSION -eq 1 ]]; then
+        VERBOSE=1
+        mk::debug "Stoned Fox's "
+        mk::fail "Awesome "
+        mk::done "MK"
+        mk::debug " Script "
+        mk::done "v$VERSION\n"
+        mk::debug "MIT License\n"
+        mk::info "https://github.com/drjnmrh/mk-script.git\n"
+        mk::exit 0
+    fi
+
+    if [[ $DOUPDATE -eq 1 ]]; then
+        mk::info "Update self... \n"
+        curl -LO https://raw.githubusercontent.com/drjnmrh/mk-script/main/mk
+        if [[ $? -ne 0 ]]; then
+            mk::fail "FAILED(Update)\n"
+            mk::exit 1
+        fi
+        mk::done "DONE\n"
+        mk::exit 0
+    fi
+
     mk::read_local_properties ${ROOT}
 
     if [[ "$PLATFORM" == "auto" ]]; then
