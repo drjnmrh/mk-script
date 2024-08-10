@@ -2,6 +2,10 @@
 
 # CHANGELOG
 #
+# v1.0.2
+# - Add version-short flag
+# - Add version output after self-update
+#
 # v1.0.1
 # - Add beautiful version printing flag
 # - Add self-update flag
@@ -9,7 +13,7 @@
 # v1.0.0
 # - Implement basic functionality: generate using cmake, build, test
 
-VERSION="1.0.1"
+VERSION="1.0.2"
 
 PLATFORM="auto"
 OLDWD=$(pwd)
@@ -104,6 +108,7 @@ mk::help() {
     echo "  --build-type <type>              = set build type: Release(default), Debug, RelWithDebInfo, MinSizeRel"
     echo "  --update-self                    = update this mk script and exit"
     echo "  --version                        = show version and exit"
+    echo "  --version-short                  = show only version text and exit"
     echo ""
     echo "Examples:"
     echo ""
@@ -120,6 +125,7 @@ ONLY=""
 BUILD_TYPE="Release"
 DOUPDATE=0
 DOVERSION=0
+DOSHORTVERSION=0
 
 
 mk::parse_args() {
@@ -149,6 +155,7 @@ mk::parse_args() {
     --build-type) BUILD_TYPE=$2; _defaultBuildType=0; shift;;
     --update-self) DOUPDATE=1;;
     --version) DOVERSION=1;;
+    --version-short) DOSHORTVERSION=1;;
     *) echo "Unknown parameter passed: $1" >&2; exit 1;;
     esac; shift; done
 
@@ -175,6 +182,12 @@ mk::main() {
 
     mk::parse_args $@
 
+    if [[ $DOSHORTVERSION -eq 1 ]]; then
+        VERBOSE=1
+        mk::debug "$VERSION\n"
+        mk::exit 0
+    fi
+
     if [[ $DOVERSION -eq 1 ]]; then
         VERBOSE=1
         mk::debug "Stoned Fox's "
@@ -194,6 +207,8 @@ mk::main() {
             mk::fail "FAILED(Update)\n"
             mk::exit 1
         fi
+        _version=$($MYDIR/mk --version-short)
+        mk::info "Updated to v$_version\n"
         mk::done "DONE\n"
         mk::exit 0
     fi
