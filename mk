@@ -2,6 +2,9 @@
 
 # CHANGELOG
 #
+# v1.0.3
+# - Add source flag which allows to set the path to the main CMakeLists.txt script
+#
 # v1.0.2
 # - Add version-short flag
 # - Add version output after self-update
@@ -13,7 +16,7 @@
 # v1.0.0
 # - Implement basic functionality: generate using cmake, build, test
 
-VERSION="1.0.2"
+VERSION="1.0.3"
 
 PLATFORM="auto"
 OLDWD=$(pwd)
@@ -109,6 +112,7 @@ mk::help() {
     echo "  --update-self                    = update this mk script and exit"
     echo "  --version                        = show version and exit"
     echo "  --version-short                  = show only version text and exit"
+    echo "  --source <path/to/script>        = specify path to the main CMakeLists.txt script (default: $MYDIR/sources)"
     echo ""
     echo "Examples:"
     echo ""
@@ -126,12 +130,15 @@ BUILD_TYPE="Release"
 DOUPDATE=0
 DOVERSION=0
 DOSHORTVERSION=0
+DEFAULT_SOURCE_PATH="$MYDIR/sources"
+SOURCE_PATH="$DEFAULT_SOURCE_PATH"
 
 
 mk::parse_args() {
 
     local _defaultPrefix=0
     local _defaultBuildType=0
+    local _defaultSourcePath=0
 
     # prefix dir might be changed by the local.properties
     if [[ "$PREFIX" == "${ROOT}/.output" ]]; then
@@ -142,6 +149,11 @@ mk::parse_args() {
     if [[ "$BUILD_TYPE" == "Release" ]]; then
         mk::debug "default build type is $BUILD_TYPE\n"
         _defaultBuildType=1
+    fi
+
+    if [[ "$SOURCE_PATH" == "$DEFAULT_SOURCE_PATH" ]]; then
+        mk::debug "default source path is $SOURCE_PATH\n"
+        _defaultSourcePath=1
     fi
 
     while [[ "$#" > 0 ]]; do case $1 in
@@ -156,6 +168,7 @@ mk::parse_args() {
     --update-self) DOUPDATE=1;;
     --version) DOVERSION=1;;
     --version-short) DOSHORTVERSION=1;;
+    --source) SOURCE_PATH=$2; _defaultSourcePath=0; shift;;
     *) echo "Unknown parameter passed: $1" >&2; exit 1;;
     esac; shift; done
 
@@ -175,13 +188,14 @@ mk::parse_args() {
     if [[ $_defaultBuildType -eq 1 ]]; then
         BUILD_TYPE=Release
     fi
+
+    if [[ $_defaultSourcePath -eq 1 ]]; then
+        SOURCE_PATH="$DEFAULT_SOURCE_PATH"
+    fi
 }
 
 
-mk::main() {
-
-    mk::parse_args $@
-
+mk::print_version_and_exit() {
     if [[ $DOSHORTVERSION -eq 1 ]]; then
         VERBOSE=1
         mk::debug "$VERSION\n"
@@ -199,7 +213,10 @@ mk::main() {
         mk::info "https://github.com/drjnmrh/mk-script.git\n"
         mk::exit 0
     fi
+}
 
+
+mk::update_self_and_exit() {
     if [[ $DOUPDATE -eq 1 ]]; then
         mk::info "Update self... \n"
         curl -LO https://raw.githubusercontent.com/drjnmrh/mk-script/main/mk
@@ -212,7 +229,41 @@ mk::main() {
         mk::done "DONE\n"
         mk::exit 0
     fi
+}
 
+
+mk::normalize_build_type() {
+    BUILD_TYPE=$(echo $BUILD_TYPE | tr '[:lower:]' '[:upper:]')
+    if [[ "$BUILD_TYPE" == "RELEASE" ]]; then
+        BUILD_TYPE="Release"
+    elif [[ "$BUILD_TYPE" == "DEBUG" ]]; then
+        BUILD_TYPE="Debug"
+    elif [[ "$BUILD_TYPE" == "MINSIZEREL" ]]; then
+        BUILD_TYPE="MinSizeRel"
+    elif [[ "$BUILD_TYPE" == "RELWITHDEBINFO" ]]; then
+        BUILD_TYPE="RelWithDebInfo"
+    else
+        mk::err "Unknown build type $BUILD_TYPE\n"
+        mk::fail "FAILED(Prepare)\n"
+        mk::exit 1
+    fi
+}
+
+
+mk::normalize_source_path() {
+    case $SOURCE_PATH in
+        /*) mk::debug "Source path is absolute\n";;
+        *) SOURCE_PATH="$OLDWD/$SOURCE_PATH";;
+    esac
+    mk::debug "SOURCE_PATH=$SOURCE_PATH\n"
+}
+
+
+mk::main() {
+
+    mk::parse_args $@
+    mk::print_version_and_exit
+    mk::update_self_and_exit
     mk::read_local_properties ${ROOT}
 
     if [[ "$PLATFORM" == "auto" ]]; then
@@ -252,25 +303,13 @@ mk::main() {
 
     cmakeToolchainFile=""
     if [[ "$PLATFORM" == "mingw" ]]; then
-        cmakeToolchainFile="-DCMAKE_TOOLCHAIN_FILE=../scripts/MinGW64-toolchain.cmake"
+        cmakeToolchainFile="-DCMAKE_TOOLCHAIN_FILE=${ROOT}/scripts/MinGW64-toolchain.cmake"
     fi
 
-    BUILD_TYPE=$(echo $BUILD_TYPE | tr '[:lower:]' '[:upper:]')
-    if [[ "$BUILD_TYPE" == "RELEASE" ]]; then
-        BUILD_TYPE="Release"
-    elif [[ "$BUILD_TYPE" == "DEBUG" ]]; then
-        BUILD_TYPE="Debug"
-    elif [[ "$BUILD_TYPE" == "MINSIZEREL" ]]; then
-        BUILD_TYPE="MinSizeRel"
-    elif [[ "$BUILD_TYPE" == "RELWITHDEBINFO" ]]; then
-        BUILD_TYPE="RelWithDebInfo"
-    else
-        mk::err "Unknown build type $BUILD_TYPE\n"
-        mk::fail "FAILED(Prepare)\n"
-        mk::exit 1
-    fi
+    mk::normalize_build_type
+    mk::normalize_source_path
 
-    cmake ../sources $VERBOSE_FLAG -DVERBOSE=$VERBOSE $PROPS -DCMAKE_BUILD_TYPE=$BUILD_TYPE $cmakeToolchainFile
+    cmake $SOURCE_PATH $VERBOSE_FLAG -DVERBOSE=$VERBOSE $PROPS -DCMAKE_BUILD_TYPE=$BUILD_TYPE $cmakeToolchainFile
     if [[ $? -ne 0 ]]; then
         mk::fail "FAILED(Generate)\n"
         mk::exit 1
