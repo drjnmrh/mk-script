@@ -9,4 +9,4 @@ project(main LANGUAGES C CXX)
 add_executable(main ${CMAKE_SOURCE_DIR}/main.cpp)
 target_compile_options(main PRIVATE "-std=c++20")
 
-add_test(NAME test-main COMMAND main)
+add_test(NAME test-default-run COMMAND main)

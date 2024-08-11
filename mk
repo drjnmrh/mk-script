@@ -2,6 +2,9 @@
 
 # CHANGELOG
 #
+# v1.0.4
+# - Add toolchain option which allows to set path to the CMake toolchain file
+#
 # v1.0.3
 # - Add source flag which allows to set the path to the main CMakeLists.txt script
 #
@@ -16,7 +19,7 @@
 # v1.0.0
 # - Implement basic functionality: generate using cmake, build, test
 
-VERSION="1.0.3"
+VERSION="1.0.4"
 
 PLATFORM="auto"
 OLDWD=$(pwd)
@@ -113,6 +116,7 @@ mk::help() {
     echo "  --version                        = show version and exit"
     echo "  --version-short                  = show only version text and exit"
     echo "  --source <path/to/script>        = specify path to the main CMakeLists.txt script (default: $MYDIR/sources)"
+    echo "  --toolchain <path/to/toolchain>  = specify path to the CMake toolchain file"
     echo ""
     echo "Examples:"
     echo ""
@@ -132,6 +136,7 @@ DOVERSION=0
 DOSHORTVERSION=0
 DEFAULT_SOURCE_PATH="$MYDIR/sources"
 SOURCE_PATH="$DEFAULT_SOURCE_PATH"
+TOOLCHAIN="null"
 
 
 mk::parse_args() {
@@ -169,6 +174,7 @@ mk::parse_args() {
     --version) DOVERSION=1;;
     --version-short) DOSHORTVERSION=1;;
     --source) SOURCE_PATH=$2; _defaultSourcePath=0; shift;;
+    --toolchain) TOOLCHAIN=$2; shift;;
     *) echo "Unknown parameter passed: $1" >&2; exit 1;;
     esac; shift; done
 
@@ -259,6 +265,26 @@ mk::normalize_source_path() {
 }
 
 
+mk::construct_toolchain_flag() {
+    if [[ "$TOOLCHAIN" == "null" ]]; then
+        echo ""
+    else
+        case $TOOLCHAIN in
+            /*) mk::debug "Toolchain path is already absolute\n";;
+            *) TOOLCHAIN="$OLDWD/$TOOLCHAIN";;
+        esac
+
+        if [[ ! -f "$TOOLCHAIN" ]]; then
+            mk::err "Toolchain file $TOOLCHAIN doesn't exist!\n"
+            mk::fail "FAILED(Prepare)\n"
+            mk::exit 1
+        fi
+
+        echo "-DCMAKE_TOOLCHAIN_FILE=$TOOLCHAIN"
+    fi
+}
+
+
 mk::main() {
 
     mk::parse_args $@
@@ -301,15 +327,12 @@ mk::main() {
 
     cd "$_builddir"
 
-    cmakeToolchainFile=""
-    if [[ "$PLATFORM" == "mingw" ]]; then
-        cmakeToolchainFile="-DCMAKE_TOOLCHAIN_FILE=${ROOT}/scripts/MinGW64-toolchain.cmake"
-    fi
-
     mk::normalize_build_type
     mk::normalize_source_path
 
-    cmake $SOURCE_PATH $VERBOSE_FLAG -DVERBOSE=$VERBOSE $PROPS -DCMAKE_BUILD_TYPE=$BUILD_TYPE $cmakeToolchainFile
+    _toolchainFlag=$(mk::construct_toolchain_flag)
+
+    cmake $SOURCE_PATH $VERBOSE_FLAG -DVERBOSE=$VERBOSE $PROPS -DCMAKE_BUILD_TYPE=$BUILD_TYPE $_toolchainFlag
     if [[ $? -ne 0 ]]; then
         mk::fail "FAILED(Generate)\n"
         mk::exit 1
