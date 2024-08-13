@@ -111,9 +111,13 @@ mk::read_local_properties() {
                 mk::debug "$_varname == $_propvalue ($_beforecomment)\n"
 
                 PROPS="${PROPS[@]} -D$_varname=$_propvalue"
+<<<<<<< HEAD
 
                 _lowercase=$(echo $_varname | tr A-Z a-z)
                 GRADLEW_PROPS+=("-P$_lowercase=$_propvalue")
+=======
+                GRADLEW_PROPS+=("-P$_varname=$_propvalue")
+>>>>>>> c1e24de (Add examples: cross-compile, cross-platform-smile, simple-cli-tool)
             fi
         done
     else
@@ -473,6 +477,10 @@ mk::main() {
     else
         mk::debug "Flags for CMake:-DVERBOSE=$VERBOSE${PROPS[@]}${TOCMAKE[@]}$_cmakeBuildType} $SOURCE_PATH $_generator $VERBOSE_FLAG $_toolchainFlag;\n"
 
+<<<<<<< HEAD
+=======
+        _uname=$(uname -o)
+>>>>>>> c1e24de (Add examples: cross-compile, cross-platform-smile, simple-cli-tool)
         eval cmake -DVERBOSE=$VERBOSE${PROPS[@]}${TOCMAKE[@]}$_cmakeBuildType $SOURCE_PATH $_generator $VERBOSE_FLAG $_toolchainFlag
         if [[ $? -ne 0 ]]; then
             mk::fail "FAILED(Generate)\n"
