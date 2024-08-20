@@ -2,6 +2,11 @@
 
 # CHANGELOG
 #
+# v1.0.5
+# - Add --tocmake flag which allows to pass user-defined CMake variables to the cmake command
+# - Add Xcode project generation for macosx and iphone platforms
+# - Fix toolchain option handling in case of an absolute path
+#
 # v1.0.4
 # - Add toolchain option which allows to set path to the CMake toolchain file
 #
@@ -19,7 +24,7 @@
 # v1.0.0
 # - Implement basic functionality: generate using cmake, build, test
 
-VERSION="1.0.4"
+VERSION="1.0.5"
 
 PLATFORM="auto"
 OLDWD=$(pwd)
