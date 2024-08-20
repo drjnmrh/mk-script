@@ -2,6 +2,11 @@
 
 # CHANGELOG
 #
+# v1.0.5
+# - Add --tocmake flag which allows to pass user-defined CMake variables to the cmake command
+# - Add Xcode project generation for macosx and iphone platforms
+# - Fix toolchain option handling in case of an absolute path
+#
 # v1.0.4
 # - Add toolchain option which allows to set path to the CMake toolchain file
 #
@@ -19,7 +24,7 @@
 # v1.0.0
 # - Implement basic functionality: generate using cmake, build, test
 
-VERSION="1.0.4"
+VERSION="1.0.5"
 
 PLATFORM="auto"
 OLDWD=$(pwd)
@@ -42,10 +47,10 @@ mk::warn() { printf "\033[33m$1\033[0m" ${@:2}; }
 mk::done() { printf "\033[32m$1\033[0m" ${@:2}; }
 mk::err()  { echo "[$(date +'%Y-%m-%dT%H:%M:%S%z')]: $@" >&2; }
 
-mk::debug() { 
-    if [[ $VERBOSE -eq 1 ]]; then 
-        printf "$1" ${@:2}; 
-    fi 
+mk::debug() {
+    if [[ $VERBOSE -eq 1 ]]; then
+        printf "$1" ${@:2};
+    fi
 }
 
 mk::exit() {
@@ -117,6 +122,7 @@ mk::help() {
     echo "  --version-short                  = show only version text and exit"
     echo "  --source <path/to/script>        = specify path to the main CMakeLists.txt script (default: $MYDIR/sources)"
     echo "  --toolchain <path/to/toolchain>  = specify path to the CMake toolchain file"
+    echo "  --tocmake <CMake flag>           = specify CMake flag to be passed to the generator (e.g. -DIOS_TYPE=iphone)"
     echo ""
     echo "Examples:"
     echo ""
@@ -137,6 +143,7 @@ DOSHORTVERSION=0
 DEFAULT_SOURCE_PATH="$MYDIR/sources"
 SOURCE_PATH="$DEFAULT_SOURCE_PATH"
 TOOLCHAIN="null"
+TOCMAKE=""
 
 
 mk::parse_args() {
@@ -175,6 +182,7 @@ mk::parse_args() {
     --version-short) DOSHORTVERSION=1;;
     --source) SOURCE_PATH=$2; _defaultSourcePath=0; shift;;
     --toolchain) TOOLCHAIN=$2; shift;;
+    --tocmake) TOCMAKE="$TOCMAKE $2"; shift;;
     *) echo "Unknown parameter passed: $1" >&2; exit 1;;
     esac; shift; done
 
@@ -270,7 +278,7 @@ mk::construct_toolchain_flag() {
         echo ""
     else
         case $TOOLCHAIN in
-            /*) mk::debug "Toolchain path is already absolute\n";;
+            /*) ;;
             *) TOOLCHAIN="$OLDWD/$TOOLCHAIN";;
         esac
 
@@ -332,13 +340,27 @@ mk::main() {
 
     _toolchainFlag=$(mk::construct_toolchain_flag)
 
-    cmake $SOURCE_PATH $VERBOSE_FLAG -DVERBOSE=$VERBOSE $PROPS -DCMAKE_BUILD_TYPE=$BUILD_TYPE $_toolchainFlag
+    _cmakeBuildType="-DCMAKE_BUILD_TYPE=$BUILD_TYPE"
+
+    _generator=""
+    if [[ "$PLATFORM" == "macosx" || "$PLATFORM" == "iphone" ]]; then
+        _generator="-G Xcode"
+        _cmakeBuildType=""
+    fi
+
+    mk::debug "Flags for CMake: $SOURCE_PATH; $_generator; $VERBOSE_FLAG; $TOCMAKE; $PROPS; $_cmakeBuildType; $_toolchainFlag;\n"
+
+    cmake $SOURCE_PATH $_generator $VERBOSE_FLAG $TOCMAKE -DVERBOSE=$VERBOSE $PROPS $_cmakeBuildType $_toolchainFlag
     if [[ $? -ne 0 ]]; then
         mk::fail "FAILED(Generate)\n"
         mk::exit 1
     fi
 
-    make -j ${JOBS}
+    if [[ "$PLATFORM" == "macosx" || "$PLATFORM" == "iphone" ]]; then
+        cmake --build . --config Release -- -jobs ${JOBS} -quiet
+    else
+        make -j ${JOBS}
+    fi
     if [[ $? -ne 0 ]]; then
         mk::fail "FAILED(Build)\n"
         mk::exit 1

@@ -1,3 +1,5 @@
 .*.swp
 local*
 build-*
+.ycm_extra_conf.py
+.vimrc
