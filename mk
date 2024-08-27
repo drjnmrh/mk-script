@@ -2,6 +2,10 @@
 
 # CHANGELOG
 #
+# v1.0.6
+# - Fix local.properties parsing for Msys (VSCode git bash environment)
+# - Fix MSVC build command
+#
 # v1.0.5
 # - Add --tocmake flag which allows to pass user-defined CMake variables to the cmake command
 # - Add Xcode project generation for macosx and iphone platforms
@@ -24,7 +28,7 @@
 # v1.0.0
 # - Implement basic functionality: generate using cmake, build, test
 
-VERSION="1.0.5"
+VERSION="1.0.6"
 
 PLATFORM="auto"
 OLDWD=$(pwd)
@@ -68,6 +72,7 @@ PROPS=""
 mk::read_local_properties() {
 
     local _root=$1
+    mk::debug "_root == $_root\n"
 
     if [[ ! -e $_root/${PROPERTIESFILE} ]]; then
         mk::warn "$_root doesn't contain properties file - skipping\n"
@@ -82,23 +87,44 @@ mk::read_local_properties() {
     mk::debug "=%.0s" {1..80}
     mk::debug "\n"
 
-    while IFS= read -r line
-    do
-        # we regard all symbols on one line after '#' symbol as comments
-        local _beforecomment=$(echo $line | sed 's/\(.*\)\([#].*\)$/\1/g')
-        local _propname=$(echo $_beforecomment | sed 's/^\(\([a-zA-Z0-9.][a-zA-Z0-9.]*[=]\)\(.*\)\)$/\2/g')
-        if [[ ! "$_propname" == "" ]]; then
-            _propname=${_propname:0:${#_propname}-1} # remove '=' character
-            local _propvalue=$(echo $_beforecomment | sed 's/^\(.*[=]["]\(.*\)["]\)$/\2/g')
+    _uname=$(uname -o)
 
-            local _varname=$(echo $_propname | sed 's/[.]/_/g' | tr a-z A-Z)
+    if [[ "$_uname" == "Msys" ]]; then
+        IFS=$'\n'
+        for line in $_content; do
+            # we regard all symbols on one line after '#' symbol as comments
+            local _beforecomment=$(echo $line | sed 's/\(.*\)\([#].*\)$/\1/g')
+            local _propname=$(echo $_beforecomment | sed 's/^\(\([a-zA-Z0-9.][a-zA-Z0-9.]*[=]\)\(.*\)\)$/\2/g')
+            if [[ ! "$_propname" == "" ]]; then
+                _propname=${_propname:0:${#_propname}-1} # remove '=' character
+                local _propvalue=$(echo $_beforecomment | sed 's/^\(.*[=]["]\(.*\)["]\)$/\2/g')
 
-            export $_varname="$_propvalue"
-            mk::debug "$_varname == $_propvalue ($_beforecomment)\n"
+                local _varname=$(echo $_propname | sed 's/[.]/_/g' | tr a-z A-Z)
 
-            PROPS="$PROPS -D$_varname=$_propvalue"
-        fi
-    done < $_root/${PROPERTIESFILE}
+                export $_varname="$_propvalue"
+                mk::debug "$_varname == $_propvalue ($_beforecomment)\n"
+
+                PROPS="${PROPS[@]} -D$_varname=$_propvalue"
+            fi
+        done
+    else
+        while IFS= read -r line; do
+            # we regard all symbols on one line after '#' symbol as comments
+            local _beforecomment=$(echo $line | sed 's/\(.*\)\([#].*\)$/\1/g')
+            local _propname=$(echo $_beforecomment | sed 's/^\(\([a-zA-Z0-9.][a-zA-Z0-9.]*[=]\)\(.*\)\)$/\2/g')
+            if [[ ! "$_propname" == "" ]]; then
+                _propname=${_propname:0:${#_propname}-1} # remove '=' character
+                local _propvalue=$(echo $_beforecomment | sed 's/^\(.*[=]["]\(.*\)["]\)$/\2/g')
+
+                local _varname=$(echo $_propname | sed 's/[.]/_/g' | tr a-z A-Z)
+
+                export $_varname="$_propvalue"
+                mk::debug "$_varname == $_propvalue ($_beforecomment)\n"
+
+                PROPS="$PROPS -D$_varname=$_propvalue"
+            fi
+        done < $_root/${PROPERTIESFILE}
+    fi
 
     return 0
 }
@@ -348,9 +374,14 @@ mk::main() {
         _cmakeBuildType=""
     fi
 
-    mk::debug "Flags for CMake: $SOURCE_PATH; $_generator; $VERBOSE_FLAG; $TOCMAKE; $PROPS; $_cmakeBuildType; $_toolchainFlag;\n"
+    mk::debug "Flags for CMake:-DVERBOSE=$VERBOSE${PROPS[@]}; $SOURCE_PATH; $_generator; $VERBOSE_FLAG; $TOCMAKE; $_cmakeBuildType; $_toolchainFlag;\n"
 
-    cmake $SOURCE_PATH $_generator $VERBOSE_FLAG $TOCMAKE -DVERBOSE=$VERBOSE $PROPS $_cmakeBuildType $_toolchainFlag
+    _uname=$(uname -o)
+    if [[ "$_uname" == "Msys" ]]; then
+        eval cmake -DVERBOSE=$VERBOSE${PROPS[@]}${TOCMAKE[@]} $SOURCE_PATH $_generator $VERBOSE_FLAG $_toolchainFlag
+    else
+        cmake -DVERBOSE=$VERBOSE${PROPS[@]} $SOURCE_PATH $_generator $VERBOSE_FLAG $TOCMAKE $_cmakeBuildType $_toolchainFlag
+    fi
     if [[ $? -ne 0 ]]; then
         mk::fail "FAILED(Generate)\n"
         mk::exit 1
@@ -358,6 +389,8 @@ mk::main() {
 
     if [[ "$PLATFORM" == "macosx" || "$PLATFORM" == "iphone" ]]; then
         cmake --build . --config Release -- -jobs ${JOBS} -quiet
+    elif [[ "$PLATFORM" == "msvc" ]]; then
+        cmake --build .
     else
         make -j ${JOBS}
     fi
