@@ -366,34 +366,40 @@ mk::main() {
 
     _toolchainFlag=$(mk::construct_toolchain_flag)
 
-    _cmakeBuildType="-DCMAKE_BUILD_TYPE=$BUILD_TYPE"
-
     _generator=""
+    _cmakeBuildType=" -DCMAKE_BUILD_TYPE=$BUILD_TYPE"
+    _cmakeBuildConfigType=""
+    _ctestConfigType=" -C $BUILD_TYPE"
+    _buildExtraFlags=""
+
     if [[ "$PLATFORM" == "macosx" || "$PLATFORM" == "iphone" ]]; then
         _generator="-G Xcode"
         _cmakeBuildType=""
+        _cmakeBuildConfigType="--config Release"
+        _ctestConfigType=" -C Release"
+        _buildExtraFlags=" -- -quiet"
+    elif [[ "$PLATFORM" == "msvc" ]]; then
+        _generator="" # it seems that CMake automatically sets VSCode generator
+        _cmakeBuildType=""
+        _cmakeBuildConfigType="--config $BUILD_TYPE"
+        _ctestConfigType=" -C $BUILD_TYPE"
+        _buildExtraFlags=""
     fi
 
-    mk::debug "Flags for CMake:-DVERBOSE=$VERBOSE${PROPS[@]}; $SOURCE_PATH; $_generator; $VERBOSE_FLAG; $TOCMAKE; $_cmakeBuildType; $_toolchainFlag;\n"
+    mk::debug "Flags for CMake:-DVERBOSE=$VERBOSE${PROPS[@]}${TOCMAKE[@]}$_cmakeBuildType} $SOURCE_PATH $_generator $VERBOSE_FLAG $_toolchainFlag;\n"
 
     _uname=$(uname -o)
     if [[ "$_uname" == "Msys" ]]; then
-        eval cmake -DVERBOSE=$VERBOSE${PROPS[@]}${TOCMAKE[@]} $SOURCE_PATH $_generator $VERBOSE_FLAG $_toolchainFlag
+        eval cmake -DVERBOSE=$VERBOSE${PROPS[@]}${TOCMAKE[@]}$_cmakeBuildType $SOURCE_PATH $_generator $VERBOSE_FLAG $_toolchainFlag
     else
-        cmake -DVERBOSE=$VERBOSE${PROPS[@]} $SOURCE_PATH $_generator $VERBOSE_FLAG $TOCMAKE $_cmakeBuildType $_toolchainFlag
+        cmake -DVERBOSE=$VERBOSE${PROPS[@]}${TOCMAKE[@]}$_cmakeBuildType $SOURCE_PATH $_generator $VERBOSE_FLAG $_toolchainFlag
     fi
     if [[ $? -ne 0 ]]; then
         mk::fail "FAILED(Generate)\n"
         mk::exit 1
     fi
 
-    if [[ "$PLATFORM" == "macosx" || "$PLATFORM" == "iphone" ]]; then
-        cmake --build . --config Release -- -jobs ${JOBS} -quiet
-    elif [[ "$PLATFORM" == "msvc" ]]; then
-        cmake --build .
-    else
-        make -j ${JOBS}
-    fi
+    cmake --build . $_cmakeBuildConfigType --parallel ${JOBS}${_buildExtraFlags[@]}
     if [[ $? -ne 0 ]]; then
         mk::fail "FAILED(Build)\n"
         mk::exit 1
@@ -401,13 +407,13 @@ mk::main() {
 
     if [[ $DOTESTING -eq 1 ]]; then
         if [[ $ONLY == "" ]]; then
-            ctest --verbose --timeout 300
+            ctest --verbose --timeout 300${_ctestConfigType[@]}
         else
             tmp=${ONLY//"::"/$'\2'}
             IFS=$'\2' read -a arr <<< "$tmp"
             ONLY=${arr[0]}
             TEST=${arr[1]}
-            TEST_ARGUMENTS=$TEST ctest --verbose --timeout 300 -R $ONLY
+            TEST_ARGUMENTS=$TEST ctest --verbose --timeout 300${_ctestConfigType[@]} -R $ONLY
         fi
         if [[ $? -ne 0 ]]; then
             mk::fail "FAILED(Test)\n"
