@@ -2,6 +2,11 @@
 
 # CHANGELOG
 #
+# v1.0.7
+# - Fix build type, build and ctest config flags setup
+# - Refactor platform-specific branches: localized to one place
+# - Add MSVC platform autodetect branch
+#
 # v1.0.6
 # - Fix local.properties parsing for Msys (VSCode git bash environment)
 # - Fix MSVC build command
@@ -28,7 +33,7 @@
 # v1.0.0
 # - Implement basic functionality: generate using cmake, build, test
 
-VERSION="1.0.6"
+VERSION="1.0.7"
 
 PLATFORM="auto"
 OLDWD=$(pwd)
