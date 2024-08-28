@@ -332,6 +332,8 @@ mk::main() {
             PLATFORM=macosx
         elif [[ "$_uname" == "Linux" ]]; then
             PLATFORM=linux
+        elif [[ "$_uname" == MINGW64* ]]; then
+            PLATFORM=msvc
         fi
     fi
 
