@@ -73,6 +73,7 @@ mk::center() {
 }
 
 PROPS=""
+GRADLEW_PROPS=()
 
 mk::read_local_properties() {
 
@@ -110,6 +111,9 @@ mk::read_local_properties() {
                 mk::debug "$_varname == $_propvalue ($_beforecomment)\n"
 
                 PROPS="${PROPS[@]} -D$_varname=$_propvalue"
+
+                _lowercase=$(echo $_varname | tr A-Z a-z)
+                GRADLEW_PROPS+=("-P$_lowercase=$_propvalue")
             fi
         done
     else
@@ -127,6 +131,9 @@ mk::read_local_properties() {
                 mk::debug "$_varname == $_propvalue ($_beforecomment)\n"
 
                 PROPS="$PROPS -D$_varname=$_propvalue"
+
+                _lowercase=$(echo $_varname | tr A-Z a-z)
+                GRADLEW_PROPS+=("-P$_lowercase=$_propvalue")
             fi
         done < $_root/${PROPERTIESFILE}
     fi
@@ -175,6 +182,7 @@ DEFAULT_SOURCE_PATH="$MYDIR/sources"
 SOURCE_PATH="$DEFAULT_SOURCE_PATH"
 TOOLCHAIN="null"
 TOCMAKE=""
+ANDROIDABI=(armeabi-v7a arm64-v8a x86_64)
 
 
 mk::parse_args() {
@@ -393,20 +401,86 @@ mk::main() {
         _buildExtraFlags=""
     fi
 
-    mk::debug "Flags for CMake:-DVERBOSE=$VERBOSE${PROPS[@]}${TOCMAKE[@]}$_cmakeBuildType} $SOURCE_PATH $_generator $VERBOSE_FLAG $_toolchainFlag;\n"
+    if [[ "$PLATFORM" == "android" ]]; then
+        # First, find in sources 'gradlew' script. MK will consider folder with
+        # this file an Android Project root folder.
 
-    _uname=$(uname -o)
-    if [[ "$_uname" == "Msys" ]]; then
-        eval cmake -DVERBOSE=$VERBOSE${PROPS[@]}${TOCMAKE[@]}$_cmakeBuildType $SOURCE_PATH $_generator $VERBOSE_FLAG $_toolchainFlag
+        _gradlew=$(find $SOURCE_PATH -name "gradlew" -type f)
+        if [[ ! -z "$_gradlew" ]]; then
+            _gradlewPath=$(dirname $_gradlew)
+            mk::info "Found Gradlew script in $_gradlewPath\n"
+            cd $_gradlewPath
+            _com=( ./gradlew clean assembleRelease -Pverbose=${VERBOSE} "${GRADLEW_PROPS[@]}")
+            "${_com[@]}"
+            if [[ $? -ne 0 ]]; then
+                mk::fail "FAIL(Gradle)\n"
+                mk::exit 1
+            fi
+        else
+            mk::info "No Gradlew script in sources - trying to build using NDK cmake\n"
+
+            if [[ -z "${ANDROID_HOME}" ]]; then
+                mk::debug "ANDROID_HOME is not set - trying android.dir from local.properties\n"
+                ANDROID_HOME=${ANDROID_DIR}
+            fi
+            if [[ -z "${ANDROID_HOME}" ]]; then
+                mk::fail "Android requires ANDROID_HOME environment variable to be set\n"
+                mk::exit 1
+            fi
+
+            if [[ -z "${NDK_HOME}" ]]; then
+                mk::debug "NDK_HOME is not set - trying ndk.dir from local.properties\n"
+                NDK_HOME=${NDK_DIR}
+            fi
+            if [[ -z "${NDK_HOME}" ]]; then
+                mk::fail "Android requires NDK_HOME environment variable to be set\n"
+                mk::exit 1
+            fi
+            mk::debug "ANDROID_HOME = $ANDROID_HOME\n"
+            mk::debug "NDK_HOME = $NDK_HOME\n"
+
+            _toolchain=$NDK_HOME/build/cmake/android.toolchain.cmake
+            _cmaketool=$ANDROID_HOME/cmake/3.22.1/bin/cmake
+
+            for _abi in ${ANDROIDABI[@]}; do
+                if [[ ! -d "$_abi" ]]; then
+                    mkdir $_abi
+                fi
+                cd $_abi
+
+                _prefix=$PREFIX/android/$_abi
+
+                $_cmaketool $SOURCE_PATH -DCMAKE_TOOLCHAIN_FILE=$_toolchain -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
+                    -DANDROID_ABI=$_abi -DCMAKE_INSTALL_PREFIX=$_prefix \
+                    -DANDROID_TOOLCHAIN=clang -DANDROID_STL=c++_static \
+                    -DANDROID_ARM_NEON=ON -DANDROID_PLATFORM=android-28 \
+                    -DCMAKE_MAKE_PROGRAM=$ANDROID_HOME/cmake/3.22.1/bin/ninja \
+                    -G "Ninja" -DVERBOSE=$VERBOSE${PROPS[@]}${TOCMAKE[@]} $VERBOSE_FLAG
+                if [[ $? -ne 0 ]]; then
+                    mk::fail "FAILED(Generate $_abi)\n"
+                    mk::exit 1
+                fi
+
+                $_cmaketool --build . --config $BUILD_TYPE -- -j${JOBS}
+                if [[ $? -ne 0 ]]; then
+                    mk::fail "FAILED(Build $_abi)\n"
+                    mk::exit 1
+                fi
+
+                cd ..
+            done
+        fi
     else
-        cmake -DVERBOSE=$VERBOSE${PROPS[@]}${TOCMAKE[@]}$_cmakeBuildType $SOURCE_PATH $_generator $VERBOSE_FLAG $_toolchainFlag
-    fi
-    if [[ $? -ne 0 ]]; then
-        mk::fail "FAILED(Generate)\n"
-        mk::exit 1
-    fi
+        mk::debug "Flags for CMake:-DVERBOSE=$VERBOSE${PROPS[@]}${TOCMAKE[@]}$_cmakeBuildType} $SOURCE_PATH $_generator $VERBOSE_FLAG $_toolchainFlag;\n"
 
-    cmake --build . $_cmakeBuildConfigType --parallel ${JOBS}${_buildExtraFlags[@]}
+        eval cmake -DVERBOSE=$VERBOSE${PROPS[@]}${TOCMAKE[@]}$_cmakeBuildType $SOURCE_PATH $_generator $VERBOSE_FLAG $_toolchainFlag
+        if [[ $? -ne 0 ]]; then
+            mk::fail "FAILED(Generate)\n"
+            mk::exit 1
+        fi
+
+        cmake --build . $_cmakeBuildConfigType --parallel ${JOBS}${_buildExtraFlags[@]}
+    fi
     if [[ $? -ne 0 ]]; then
         mk::fail "FAILED(Build)\n"
         mk::exit 1
