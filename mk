@@ -2,6 +2,10 @@
 
 # CHANGELOG
 #
+# v1.0.8
+# - Add Android platform support
+# - Refactor PROPS list
+#
 # v1.0.7
 # - Fix build type, build and ctest config flags setup
 # - Refactor platform-specific branches: localized to one place
@@ -33,7 +37,7 @@
 # v1.0.0
 # - Implement basic functionality: generate using cmake, build, test
 
-VERSION="1.0.7"
+VERSION="1.0.8"
 
 PLATFORM="auto"
 OLDWD=$(pwd)
@@ -72,7 +76,7 @@ mk::center() {
     echo "${_separator:0:$((39-${#1}/2))} $1 ${_separator:0:$((39-${#1}/2))}"
 }
 
-PROPS=""
+PROPS=()
 GRADLEW_PROPS=()
 
 mk::read_local_properties() {
@@ -110,7 +114,7 @@ mk::read_local_properties() {
                 export $_varname="$_propvalue"
                 mk::debug "$_varname == $_propvalue ($_beforecomment)\n"
 
-                PROPS="${PROPS[@]} -D$_varname=$_propvalue"
+                PROPS+=("-D$_varname=$_propvalue")
 
                 _lowercase=$(echo $_varname | tr A-Z a-z)
                 GRADLEW_PROPS+=("-P$_lowercase=$_propvalue")
@@ -130,7 +134,7 @@ mk::read_local_properties() {
                 export $_varname="$_propvalue"
                 mk::debug "$_varname == $_propvalue ($_beforecomment)\n"
 
-                PROPS="$PROPS -D$_varname=$_propvalue"
+                PROPS+=("-D$_varname=$_propvalue")
 
                 _lowercase=$(echo $_varname | tr A-Z a-z)
                 GRADLEW_PROPS+=("-P$_lowercase=$_propvalue")
@@ -455,7 +459,7 @@ mk::main() {
                     -DANDROID_TOOLCHAIN=clang -DANDROID_STL=c++_static \
                     -DANDROID_ARM_NEON=ON -DANDROID_PLATFORM=android-28 \
                     -DCMAKE_MAKE_PROGRAM=$ANDROID_HOME/cmake/3.22.1/bin/ninja \
-                    -G "Ninja" -DVERBOSE=$VERBOSE${PROPS[@]}${TOCMAKE[@]} $VERBOSE_FLAG
+                    -G "Ninja" -DVERBOSE=$VERBOSE ${PROPS[@]} ${TOCMAKE[@]} $VERBOSE_FLAG
                 if [[ $? -ne 0 ]]; then
                     mk::fail "FAILED(Generate $_abi)\n"
                     mk::exit 1
@@ -473,7 +477,7 @@ mk::main() {
     else
         mk::debug "Flags for CMake:-DVERBOSE=$VERBOSE${PROPS[@]}${TOCMAKE[@]}$_cmakeBuildType} $SOURCE_PATH $_generator $VERBOSE_FLAG $_toolchainFlag;\n"
 
-        eval cmake -DVERBOSE=$VERBOSE${PROPS[@]}${TOCMAKE[@]}$_cmakeBuildType $SOURCE_PATH $_generator $VERBOSE_FLAG $_toolchainFlag
+        eval cmake -DVERBOSE=$VERBOSE ${PROPS[@]} ${TOCMAKE[@]}$_cmakeBuildType $SOURCE_PATH $_generator $VERBOSE_FLAG $_toolchainFlag
         if [[ $? -ne 0 ]]; then
             mk::fail "FAILED(Generate)\n"
             mk::exit 1
