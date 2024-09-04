@@ -2,6 +2,9 @@
 
 # CHANGELOG
 #
+# v1.0.9
+# - Add 'nobuild' flag
+#
 # v1.0.8
 # - Add Android platform support
 # - Refactor PROPS list
@@ -37,7 +40,7 @@
 # v1.0.0
 # - Implement basic functionality: generate using cmake, build, test
 
-VERSION="1.0.8"
+VERSION="1.0.9"
 
 PLATFORM="auto"
 OLDWD=$(pwd)
@@ -165,6 +168,7 @@ mk::help() {
     echo "  --source <path/to/script>        = specify path to the main CMakeLists.txt script (default: $MYDIR/sources)"
     echo "  --toolchain <path/to/toolchain>  = specify path to the CMake toolchain file"
     echo "  --tocmake <CMake flag>           = specify CMake flag to be passed to the generator (e.g. -DIOS_TYPE=iphone)"
+    echo "  --nobuild                        = skip build step"
     echo ""
     echo "Examples:"
     echo ""
@@ -187,6 +191,7 @@ SOURCE_PATH="$DEFAULT_SOURCE_PATH"
 TOOLCHAIN="null"
 TOCMAKE=""
 ANDROIDABI=(armeabi-v7a arm64-v8a x86_64)
+NOBUILD=0
 
 
 mk::parse_args() {
@@ -226,6 +231,7 @@ mk::parse_args() {
     --source) SOURCE_PATH=$2; _defaultSourcePath=0; shift;;
     --toolchain) TOOLCHAIN=$2; shift;;
     --tocmake) TOCMAKE="$TOCMAKE $2"; shift;;
+    --nobuild) NOBUILD=1;;
     *) echo "Unknown parameter passed: $1" >&2; exit 1;;
     esac; shift; done
 
@@ -464,11 +470,15 @@ mk::main() {
                     mk::fail "FAILED(Generate $_abi)\n"
                     mk::exit 1
                 fi
+                mk::done "DONE(CMake)\n"
 
-                $_cmaketool --build . --config $BUILD_TYPE -- -j${JOBS}
-                if [[ $? -ne 0 ]]; then
-                    mk::fail "FAILED(Build $_abi)\n"
-                    mk::exit 1
+                if [[ $NOBUILD -eq 0 ]]; then
+                    $_cmaketool --build . --config $BUILD_TYPE -- -j${JOBS}
+                    if [[ $? -ne 0 ]]; then
+                        mk::fail "FAILED(Build $_abi)\n"
+                        mk::exit 1
+                    fi
+                    mk::done "DONE(Build)\n"
                 fi
 
                 cd ..
@@ -482,12 +492,16 @@ mk::main() {
             mk::fail "FAILED(Generate)\n"
             mk::exit 1
         fi
+        mk::done "DONE(CMake)\n"
 
-        cmake --build . $_cmakeBuildConfigType --parallel ${JOBS}${_buildExtraFlags[@]}
-    fi
-    if [[ $? -ne 0 ]]; then
-        mk::fail "FAILED(Build)\n"
-        mk::exit 1
+        if [[ $NOBUILD -eq 0 ]]; then
+            cmake --build . $_cmakeBuildConfigType --parallel ${JOBS}${_buildExtraFlags[@]}
+            if [[ $? -ne 0 ]]; then
+                mk::fail "FAILED(Build)\n"
+                mk::exit 1
+            fi
+            mk::done "DONE(Build)\n"
+        fi
     fi
 
     if [[ $DOTESTING -eq 1 ]]; then
@@ -504,6 +518,7 @@ mk::main() {
             mk::fail "FAILED(Test)\n"
             mk::exit 1
         fi
+        mk::done "DONE(Testing)\n"
     fi
     cd $OLDWD
 }
