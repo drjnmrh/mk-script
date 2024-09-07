@@ -29,13 +29,85 @@ if [[ $? -ne 0 ]]; then
 fi
 mk::done "DONE(Prune branches)\n"
 
-mk::info "Get branches list... "
-_branchesOutput=$(git branch -a --list)
+mk::info "Get local branches list... "
+_tmp1=($(git branch -a | cut -c 3-))
 if [[ $? -ne 0 ]]; then
-    mk::fail "FAILED(Branch list)\n"
+    mk::fail "FAILED\n"
     mk::exit 1
 fi
-mk::done "DONE(Branch list)\n"
+mk::done "DONE\n"
+
+_remote_branches=()
+_local_branches=()
+for _bname in "${_tmp1[@]}"
+do
+    if [[ "$_bname" == "main" ]]; then
+        continue
+    fi
+
+    if [[ "$_bname" == "origin/main" ]]; then
+        continue
+    fi
+
+    if [[ "$_bname" == "master" ]]; then
+        continue
+    fi
+
+    if [[ "$_bname" == "origin/master" ]]; then
+        continue
+    fi
+
+    if [[ "$_bname" == "->" ]]; then
+        continue
+    fi
+
+    if [[ "$_bname" == "remotes/origin/HEAD" ]]; then
+        continue
+    fi
+
+    if [[ "$_bname" == "remotes/origin/main" ]]; then
+        continue
+    fi
+
+    if [[ "$_bname" == "remotes/origin/master" ]]; then
+        continue
+    fi
+
+    if [[ "$_bname" == remotes/origin/* ]]; then
+        mk::debug "REMOTE BRANCH : $_bname\n"
+        _remote_branches+=("$_bname")
+    else
+        mk::debug "LOCAL BRANCH  : $_bname\n"
+        _local_branches+=("$_bname")
+    fi
+done
+
+for _l in "${_local_branches[@]}"
+do
+    _should_remove=1
+    for _r in "${_remote_branches[@]}"
+    do
+        if [[ "$_r" == "remotes/origin/$_l" ]]; then
+            _should_remove=0
+            break
+        fi
+    done
+
+    if [[ $_should_remove -eq 1 ]]; then
+        read -rn1 -p "Should remove '$_l' (y/n): " _answer
+        if [[ "$_answer" == "y" ]]; then
+            mk::info " Removing '$_l': "
+            git branch -D $_l > /dev/null 2>&1
+            if [[ $? -ne 0 ]]; then
+                mk::fail "FAILED(Delete $_l)\n"
+            else
+                mk::done "DONE(Delete $_l)\n"
+            fi
+        else
+            mk::info " Skipping\n"
+        fi
+    fi
+done
 
 mk::exit 0
 
