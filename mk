@@ -2,6 +2,10 @@
 
 # CHANGELOG
 #
+# v1.0.10
+# - Add plugins subsystem
+# - Add git-branch-cleanup plugin
+#
 # v1.0.9
 # - Add 'nobuild' flag
 #
@@ -40,7 +44,7 @@
 # v1.0.0
 # - Implement basic functionality: generate using cmake, build, test
 
-VERSION="1.0.9"
+VERSION="1.0.10"
 
 PLATFORM="auto"
 OLDWD=$(pwd)
@@ -169,6 +173,7 @@ mk::help() {
     echo "  --toolchain <path/to/toolchain>  = specify path to the CMake toolchain file"
     echo "  --tocmake <CMake flag>           = specify CMake flag to be passed to the generator (e.g. -DIOS_TYPE=iphone)"
     echo "  --nobuild                        = skip build step"
+    echo "  --plugin <plugin-name>           = run specific plugin"
     echo ""
     echo "Examples:"
     echo ""
@@ -192,6 +197,7 @@ TOOLCHAIN="null"
 TOCMAKE=""
 ANDROIDABI=(armeabi-v7a arm64-v8a x86_64)
 NOBUILD=0
+PLUGIN=""
 
 
 mk::parse_args() {
@@ -232,6 +238,7 @@ mk::parse_args() {
     --toolchain) TOOLCHAIN=$2; shift;;
     --tocmake) TOCMAKE="$TOCMAKE $2"; shift;;
     --nobuild) NOBUILD=1;;
+    --plugin) PLUGIN=$2; shift;;
     *) echo "Unknown parameter passed: $1" >&2; exit 1;;
     esac; shift; done
 
@@ -342,6 +349,76 @@ mk::construct_toolchain_flag() {
 }
 
 
+DOWNLOADED_PLUGINS_PATH="$MYDIR/.mk-plugins"
+
+
+mk::fetch_plugins_script() {
+    _script=$1
+
+    if [[ ! -d "$DOWNLOADED_PLUGINS_PATH" ]]; then
+        mk::debug "Create downloaded plugins path... "
+        mkdir -p $DOWNLOADED_PLUGINS_PATH
+        if [[ $? -ne 0 ]]; then
+            mk::fail "FAILED(Create plugins folder)\n"
+            mk::exit 1
+        fi
+        mk::debug "DONE(Create plugins folder)\n"
+    fi
+
+    if [[ ! -e "$DOWNLOADED_PLUGINS_PATH/$1" ]]; then
+        if [[ -e "$MYDIR/plugins/$1" ]]; then
+            mk::info "Copying plugin file \033[33m$1\033[34m... "
+            cp $MYDIR/plugins/$1 $DOWNLOADED_PLUGINS_PATH/
+            if [[ $? -ne 0 ]]; then
+                mk::fail "FAILED(Copy $1)\n"
+                mk::exit 1
+            fi
+            mk::done "DONE(Copy $1)\n"
+        else
+            mk::info "Downloading \033[33m$1\033[34m plugin...\n"
+            _olddir=$(pwd)
+            cd $DOWNLOADED_PLUGINS_PATH
+
+            curl -OL https://raw.githubusercontent.com/drjnmrh/mk-script/main/plugins/$1
+            if [[ $? -ne 0 ]]; then
+                mk::fail "FAILED(Download $1)\n"
+                mk::exit 1
+            fi
+            mk::done "DONE(Download $1)\n"
+            cd $_olddir
+        fi
+    fi
+}
+
+mk::try_run_plugin() {
+    if [[ $DOCLEANUP -eq 1 ]]; then
+        if [[ -d "$DOWNLOADED_PLUGINS_PATH" ]]; then
+            mk::info "Cleanup downloaded plugins... "
+            rm -rf $DOWNLOADED_PLUGINS_PATH
+            if [[ $? -ne 0 ]]; then
+                mk::warn "FAILED(Plugins Cleanup)\n"
+            else
+                mk::done "DONE(Plugins Cleanup)\n"
+            fi
+        fi
+    fi
+
+    if [[ ! -z "$PLUGIN" ]]; then
+        mk::fetch_plugins_script commons.sh
+        mk::fetch_plugins_script $PLUGIN
+
+        _cmd=($DOWNLOADED_PLUGINS_PATH/$PLUGIN $(pwd) $VERBOSE $PLATFORM)
+        "${_cmd[@]}"
+        if [[ $? -ne 0 ]]; then
+            mk::fail "FAILED(Run Plugin)\n"
+            mk::exit 1
+        fi
+        mk::done "DONE(Run Plugin)\n"
+        mk::exit 0
+    fi
+}
+
+
 mk::main() {
 
     mk::parse_args $@
@@ -359,6 +436,8 @@ mk::main() {
             PLATFORM=msvc
         fi
     fi
+
+    mk::try_run_plugin
 
     _builddir="build-${PLATFORM}"
 

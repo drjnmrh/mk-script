@@ -1,0 +1,41 @@
+#!/bin/bash
+
+
+MYDIR="$(cd "$(dirname "$0")" && pwd)"
+
+source $MYDIR/commons.sh
+
+ROOT=$1
+VERBOSE=$2
+PLATFORM=$3
+
+mk::info "Executing \033[33mGIT Branch Cleanup\033[34m Plugin...\n"
+
+_branches=()
+
+mk::info "Fetching new branches...\n"
+git fetch origin
+if [[ $? -ne 0 ]]; then
+    mk::fail "FAILED(New branches)\n"
+    mk::exit 1
+fi
+mk::done "DONE(New branches)\n"
+
+mk::info "Pruning deleted branches...\n"
+git fetch --prune
+if [[ $? -ne 0 ]]; then
+    mk::fail "FAILED(Prune branches)\n"
+    mk::exit 1
+fi
+mk::done "DONE(Prune branches)\n"
+
+mk::info "Get branches list... "
+_branchesOutput=$(git branch -a --list)
+if [[ $? -ne 0 ]]; then
+    mk::fail "FAILED(Branch list)\n"
+    mk::exit 1
+fi
+mk::done "DONE(Branch list)\n"
+
+mk::exit 0
+
