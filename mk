@@ -406,6 +406,11 @@ mk::try_run_plugin() {
     if [[ ! -z "$PLUGIN" ]]; then
         mk::fetch_plugins_script commons.sh
         mk::fetch_plugins_script $PLUGIN
+        chmod +x $DOWNLOADED_PLUGINS_PATH/$PLUGIN
+        if [[ $? -ne 0 ]]; then
+            mk::fail "FAILED(Set permissions)\n"
+            mk::exit 1
+        fi
 
         _cmd=($DOWNLOADED_PLUGINS_PATH/$PLUGIN $(pwd) $VERBOSE $PLATFORM)
         "${_cmd[@]}"
