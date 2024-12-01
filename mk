@@ -2,6 +2,9 @@
 
 # CHANGELOG
 #
+# v1.0.11
+# - Add ```--properties``` flag which allows to specify path to the ```local.properties``` file.
+#
 # v1.0.10
 # - Add plugins subsystem
 # - Add git-branch-cleanup plugin
@@ -159,21 +162,22 @@ mk::help() {
     echo "  ./mk [options]"
     echo ""
     echo "Options:"
-    echo "  -h, --help                       = show this help"
-    echo "  -v, --verbose                    = enable verbose mode (default is off)"
-    echo "  --platform <target-platform>     = specify target platform (msvc, macosx, linux, iphone, android, emsdk)"
-    echo "  --cleanup                        = perform project cleanup"
-    echo "  --test                           = perform testing (performs build if needed)"
-    echo "  --only <target-name>             = perform testing for the selected build target"
-    echo "  --build-type <type>              = set build type: Release(default), Debug, RelWithDebInfo, MinSizeRel"
-    echo "  --update-self                    = update this mk script and exit"
-    echo "  --version                        = show version and exit"
-    echo "  --version-short                  = show only version text and exit"
-    echo "  --source <path/to/script>        = specify path to the main CMakeLists.txt script (default: $MYDIR/sources)"
-    echo "  --toolchain <path/to/toolchain>  = specify path to the CMake toolchain file"
-    echo "  --tocmake <CMake flag>           = specify CMake flag to be passed to the generator (e.g. -DIOS_TYPE=iphone)"
-    echo "  --nobuild                        = skip build step"
-    echo "  --plugin <plugin-name>           = run specific plugin"
+    echo "  -h, --help                        = show this help"
+    echo "  -v, --verbose                     = enable verbose mode (default is off)"
+    echo "  --platform <target-platform>      = specify target platform (msvc, macosx, linux, iphone, android, emsdk)"
+    echo "  --cleanup                         = perform project cleanup"
+    echo "  --test                            = perform testing (performs build if needed)"
+    echo "  --only <target-name>              = perform testing for the selected build target"
+    echo "  --build-type <type>               = set build type: Release(default), Debug, RelWithDebInfo, MinSizeRel"
+    echo "  --update-self                     = update this mk script and exit"
+    echo "  --version                         = show version and exit"
+    echo "  --version-short                   = show only version text and exit"
+    echo "  --source <path/to/script>         = specify path to the main CMakeLists.txt script (default: $MYDIR/sources)"
+    echo "  --toolchain <path/to/toolchain>   = specify path to the CMake toolchain file"
+    echo "  --tocmake <CMake flag>            = specify CMake flag to be passed to the generator (e.g. -DIOS_TYPE=iphone)"
+    echo "  --nobuild                         = skip build step"
+    echo "  --plugin <plugin-name>            = run specific plugin"
+    echo "  --properties <path/to/properties> = specify path to local.properties file (default: ${PWD})."
     echo ""
     echo "Examples:"
     echo ""
@@ -192,6 +196,8 @@ DOUPDATE=0
 DOVERSION=0
 DOSHORTVERSION=0
 DEFAULT_SOURCE_PATH="$MYDIR/sources"
+DEFAULT_PROPERTIES_PATH="${ROOT}"
+PROPERTIES_PATH="$DEFAULT_PROPERTIES_PATH"
 SOURCE_PATH="$DEFAULT_SOURCE_PATH"
 TOOLCHAIN="null"
 TOCMAKE=""
@@ -205,6 +211,7 @@ mk::parse_args() {
     local _defaultPrefix=0
     local _defaultBuildType=0
     local _defaultSourcePath=0
+    local _defaultPropertiesPath=0
 
     # prefix dir might be changed by the local.properties
     if [[ "$PREFIX" == "${ROOT}/.output" ]]; then
@@ -220,6 +227,11 @@ mk::parse_args() {
     if [[ "$SOURCE_PATH" == "$DEFAULT_SOURCE_PATH" ]]; then
         mk::debug "default source path is $SOURCE_PATH\n"
         _defaultSourcePath=1
+    fi
+
+    if [[ "$PROPERTIES_PATH" == "$DEFAULT_PROPERTIES_PATH" ]]; then
+        mk::debug "default local.properties path is $PROPERTIES_PATH\n"
+        _defaultPropertiesPath=1
     fi
 
     while [[ "$#" > 0 ]]; do case $1 in
@@ -239,6 +251,7 @@ mk::parse_args() {
     --tocmake) TOCMAKE="$TOCMAKE $2"; shift;;
     --nobuild) NOBUILD=1;;
     --plugin) PLUGIN=$2; shift;;
+    --properties) PROPERTIES_PATH=$2; _defaultPropertiesPath=0; shift;;
     *) echo "Unknown parameter passed: $1" >&2; exit 1;;
     esac; shift; done
 
@@ -261,6 +274,10 @@ mk::parse_args() {
 
     if [[ $_defaultSourcePath -eq 1 ]]; then
         SOURCE_PATH="$DEFAULT_SOURCE_PATH"
+    fi
+
+    if [[ $_defaultPropertiesPath -eq 1 ]]; then
+        PROPERTIES_PATH="$DEFAULT_PROPERTIES_PATH"
     fi
 }
 
@@ -429,7 +446,7 @@ mk::main() {
     mk::parse_args $@
     mk::print_version_and_exit
     mk::update_self_and_exit
-    mk::read_local_properties ${ROOT}
+    mk::read_local_properties ${PROPERTIES_PATH}
 
     if [[ "$PLATFORM" == "auto" ]]; then
         _uname=$(uname)
