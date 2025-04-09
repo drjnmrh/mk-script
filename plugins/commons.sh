@@ -30,6 +30,11 @@ mk::center() {
     echo "${_separator:0:$((39-${#1}/2))} $1 ${_separator:0:$((39-${#1}/2))}"
 }
 
-
-
+mk::check_stage() {
+    if [[ $? -ne 0 ]]; then
+        mk::fail "FAILED ($1)\n"
+        mk::exit 1
+    fi
+    mk::done "DONE ($1)\n"
+}
 

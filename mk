@@ -2,6 +2,9 @@
 
 # CHANGELOG
 #
+# v1.0.12
+# - Add ```mk::check_stage``` functions to commons.sh.
+#
 # v1.0.11
 # - Add ```--properties``` flag which allows to specify path to the ```local.properties``` file.
 #
@@ -47,7 +50,7 @@
 # v1.0.0
 # - Implement basic functionality: generate using cmake, build, test
 
-VERSION="1.0.10"
+VERSION="1.0.12"
 
 PLATFORM="auto"
 OLDWD=$(pwd)
