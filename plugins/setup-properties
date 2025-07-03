@@ -1,0 +1,160 @@
+#!/bin/bash
+
+MYDIR="$(cd "$(dirname "$0")" && pwd)"
+
+source $MYDIR/commons.sh
+
+# @param project_root
+#   A project root folder (where MK script resides).
+# @param verbose_flag
+#   A verbose flag value.
+# @param target_platform
+#   A target platform name.
+mk::setup_properties() {
+  local _project_root=$1
+  VERBOSE=$2
+  local _target_platform=$3
+
+  local _existing_props=()
+  if [[ -e "$_project_root/local.properties" ]]; then
+    mk::read_local_properties $_project_root/local.properties
+    _existing_props+=(${PROPS_LIST[@]})
+  fi
+  local _thirdparty_dir=""
+  for _existing in ${_existing_props[@]}; do
+    if [[ "$_existing" == "thirdparty.dir" || "$_existing" == "3rdparty.dir" ]]; then
+      _thirdparty_dir="${PROPS_TABLE[${_existing}]}"
+
+      if [[ ${_thirdparty_dir:0:1} == "~" ]]; then
+        _thirdparty_dir="${_thirdparty_dir/#\~/$HOME}"
+      fi
+
+      if [[ -e "$_thirdparty_dir" ]]; then
+        mk::debug "Normalizing path $_thirdparty_dir "
+        _thirdparty_dir=$(readlink -f $_thirdparty_dir)
+        mk::debug "to $_thirdparty_dir\n"
+      fi
+
+      mk::step "Found 3rdparty folder in $_thirdparty_dir\n"
+
+      break
+    fi
+  done
+
+  mk::read_local_properties $_project_root/mk.properties
+
+  mk::debug "Walking properties list ${PROPS_LIST[*]}:\n"
+
+  for _prop_name in ${PROPS_LIST[@]}; do
+    local _already_set=0
+    for _existing in ${_existing_props[@]}; do
+      if [[ "$_existing" == "$_prop_name" ]]; then
+        _already_set=1
+        break
+      fi
+    done
+
+    if [[ $_already_set -eq 1 ]]; then
+      mk::step "Property $(mk::bright $_prop_name) is already set - skipping.\n"
+      continue
+    fi
+
+    if [[ ! "$_prop_name" == "dependencies.list" ]]; then
+      read -r -p "Set $_prop_name (${PROPS_TABLE[$_prop_name]}): " _prop_value
+
+      if [[ ${_prop_value:0:1} == "~" ]]; then
+        _prop_value="${_prop_value/#\~/$HOME}"
+      fi
+
+      if [[ -e "$_prop_value" ]]; then
+        mk::debug "Normalizing path $_prop_value "
+        _prop_value=$(readlink -f $_prop_value)
+        mk::debug "to $_prop_value\n"
+      fi
+
+      if [[ "$_prop_name" == "thirdparty.dir" || "$_prop_name" == "3rdparty.dir" ]]; then
+        _thirdparty_dir="$_prop_value"
+      fi
+
+      echo "" >> $_project_root/local.properties
+      echo "# ${PROPS_TABLE[$_prop_name]}" >> $_project_root/local.properties
+      echo "$_prop_name=\"$_prop_value\"" >> $_project_root/local.properties
+
+      PROPS_TABLE["$_prop_name"]="$_prop_value"
+    fi
+  done
+
+  if [[ "$VERBOSE" -eq 1 ]]; then
+    local _table_key=$(mk::center_half "NAME" ' ')
+    local _table_val=$(mk::center_half "VALUE" ' ')
+    mk::debug "$_table_key|$_table_val\n"
+    mk::debug "$(mk::center_half "" '-')+$(mk::center_half "" '-')\n"
+    for _prop_name in ${PROPS_LIST[@]}; do
+      if [[ "$_prop_name" == "dependencies.list" ]]; then
+        continue
+      fi
+
+      _table_key=$(mk::center_half "$_prop_name" ' ')
+      _table_val=$(mk::center_half "${PROPS_TABLE[$_prop_name]}" ' ')
+      mk::debug "$_table_key|$_table_val\n"
+    done
+  fi
+
+  local _need_cleanup_cache=0
+  if [[ "${#DEPENDENCIES_LIST[@]}" != 0 ]]; then
+    if [[ ! -d "$MYDIR/.cache" ]]; then
+      mkdir -p "$MYDIR/.cache"
+      if [[ $? -ne 0 ]]; then
+        mk::warn "Failed to collect dependencies!\n"
+        mk::exit 0
+      fi
+      _need_cleanup_cache=1
+    fi
+
+    if [[ ! -d "$MYDIR/.cache/prepare-scripts" ]]; then
+      pushd $MYDIR/.cache
+      git clone git@github.com:drjnmrh/prepare-scripts
+      if [[ $? -ne 0 ]]; then
+        popd
+
+        if [[ $_need_cleanup_cache -eq 1 ]]; then
+          rm -rf "$MYDIR/.cache"
+        fi
+
+        mk::warn "Failed to autocollect dependencies - do it manually :)\n"
+        mk::exit 0
+      fi
+      popd
+    fi
+
+    mk::debug "Walking dependencies:\n"
+    for _dependency in ${DEPENDENCIES_LIST[@]}; do
+      if [[ ! -e "$MYDIR/.cache/prepare-scripts/scripts/prepare-$_dependency.sh" ]]; then
+        mk::warn "No prepare script for dependency '$_dependency' was found - requires manual install.\n"
+        continue
+      fi
+
+      local _prefix_dir="$_thirdparty_dir"
+      if [[ ! -d "$_prefix_dir" ]]; then
+        read -r -p "Please, specify the folder to install '$_dependency' to: " _prefix_dir
+      fi
+
+      mk::info "Autoinstalling '$_dependency' into '$_prefix_dir'...\n"
+      PATH=$MYDIR/.cache/prepare-scripts/scripts:$PATH prepare-$_dependency.sh --prefix $_prefix_dir
+      if [[ $? -ne 0 ]]; then
+        mk::warn "FAILED, requires manual install!\n"
+      else
+        mk::done "DONE($_dependency)\n"
+      fi
+    done
+
+    if [[ $_need_cleanup_cache -eq 1 ]]; then
+      rm -rf "$MYDIR/.cache"
+    fi
+  fi
+
+  mk::exit 0
+}
+
+mk::setup_properties $@
+
