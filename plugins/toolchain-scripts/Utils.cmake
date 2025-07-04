@@ -300,13 +300,19 @@ function(add_target_test inTarget inSourceToTest)
 
     set_common_flags(${_execName}_tests)
 
-    add_test(NAME ${_execName}-tests
-       COMMAND valgrind
-           --leak-check=full
-           --show-leak-kinds=all
-           --track-origins=yes
-           --error-exitcode=1
-           $<TARGET_FILE:${_execName}_tests>
-    )
+    if (LINUX)
+      add_test(NAME ${_execName}-tests
+         COMMAND valgrind
+             --leak-check=full
+             --show-leak-kinds=all
+             --track-origins=yes
+             --error-exitcode=1
+             $<TARGET_FILE:${_execName}_tests>
+      )
+    else()
+      add_test(NAME ${_execName}-tests
+        COMMAND $<TARGET_FILE:${_execName}_tests>
+      )
+    endif()
 endfunction()
 
