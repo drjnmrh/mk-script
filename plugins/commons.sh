@@ -93,10 +93,18 @@ mk::center_half() {
 
 mk::check_stage() {
   if [[ $? -ne 0 ]]; then
-    mk::fail "FAILED ($1)\n"
+    mk::fail "FAILED ($(mk::plane $1))\n"
     mk::exit 1
   fi
-  mk::done "DONE ($1)\n"
+  mk::done "DONE ($(mk::plane $1))\n"
+}
+
+mk::mkdir_if_needed() {
+  if [[ ! -d "$1" ]]; then
+    mk::debug "creating folder $1... "
+    mkdir -p "$1"
+    mk::check_stage "prepare"
+  fi
 }
 
 mk::read_property() {
@@ -158,11 +166,35 @@ mk::read_local_properties() {
   mk::debug "\n$_content\n"
   mk::debug "$(mk::center "end" =)\n"
 
+  local _old_ifs=$IFS
   IFS=$'\n'
   for line in $_content; do
     mk::read_property $line
   done
+  IFS=$_old_ifs
 
   return 0
+}
+
+mk::normalize_path() {
+  local _path=$1
+
+  if [[ ${_path:0:1} == "~" ]]; then
+    _path="${_path/#\~/$HOME}"
+  fi
+
+  if [[ -e "${_path}" ]]; then
+    _path=$(readlink -f "$_path")
+  fi
+
+  echo "$_path"
+}
+
+mk::pushd () {
+  command pushd "$@" > /dev/null
+}
+
+mk::popd () {
+  command popd "$@" > /dev/null
 }
 

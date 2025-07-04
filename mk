@@ -2,9 +2,13 @@
 
 # CHANGELOG
 #
+# v1.1.0
+# - Change how parameters are passed to plugins.
+# - Renamed --tocmake and --nobuild flags to --to-cmake and --no-build correspondingly.
+#
 # v1.0.13
-# - Enhanced coloring functions.
-# - Introduced arrays and non-quoted values to the properties parser.
+# - Enhance coloring functions.
+# - Introduce arrays and non-quoted values to the properties parser.
 #
 # v1.0.12
 # - Add ```mk::check_stage``` functions to commons.sh.
@@ -54,7 +58,7 @@
 # v1.0.0
 # - Implement basic functionality: generate using cmake, build, test
 
-VERSION="1.0.13"
+VERSION="1.1.0"
 
 PLATFORM="auto"
 OLDWD=$(pwd)
@@ -189,7 +193,7 @@ mk::read_property() {
       PROPS_TABLE["$_propname"]="$_propvalue"
     fi
 
-    mk::debug "$_varname == $_propvalue\n"
+    mk::debug "$_varname == $_propvalue;\n"
 
     PROPS+=("-D$_varname=$_propvalue")
     PROPS_LIST+=("$_propname")
@@ -215,10 +219,12 @@ mk::read_local_properties() {
   mk::debug "\n$_content\n"
   mk::debug "$(mk::center "end" =)\n"
 
+  local _old_ifs=$IFS
   IFS=$'\n'
   for line in $_content; do
     mk::read_property $line
   done
+  IFS=$_old_ifs
 
   return 0
 }
@@ -242,8 +248,8 @@ mk::help() {
   echo "  --version-short                   = show only version text and exit"
   echo "  --source <path/to/script>         = specify path to the main CMakeLists.txt script (default: $MYDIR/sources)"
   echo "  --toolchain <path/to/toolchain>   = specify path to the CMake toolchain file"
-  echo "  --tocmake <CMake flag>            = specify CMake flag to be passed to the generator (e.g. -DIOS_TYPE=iphone)"
-  echo "  --nobuild                         = skip build step"
+  echo "  --to-cmake <CMake flag>           = specify CMake flag to be passed to the generator (e.g. -DIOS_TYPE=iphone)"
+  echo "  --no-build                        = skip build step"
   echo "  --plugin <plugin-name>            = run specific plugin"
   echo "  --properties <path/to/properties> = specify path to local.properties file (default: ${PWD})."
   echo ""
@@ -273,6 +279,7 @@ ANDROIDABI=(armeabi-v7a arm64-v8a x86_64)
 NOBUILD=0
 PLUGIN=""
 
+PLUGIN_ARGS=()
 
 mk::parse_args() {
   local _defaultPrefix=0
@@ -302,24 +309,24 @@ mk::parse_args() {
   fi
 
   while [[ "$#" > 0 ]]; do case $1 in
-  -h|--help) mk::help;;
-  -v|--verbose) VERBOSE=1;;
-  --platform) PLATFORM=$2; shift;;
-  --only) ONLY=$2; shift;;
-  --cleanup) DOCLEANUP=1;;
-  --test) DOTESTING=1;;
-  --prefix) PREFIX=$2; _defaultPrefix=0; shift;;
-  --build-type) BUILD_TYPE=$2; _defaultBuildType=0; shift;;
-  --update-self) DOUPDATE=1;;
-  --version) DOVERSION=1;;
-  --version-short) DOSHORTVERSION=1;;
-  --source) SOURCE_PATH=$2; _defaultSourcePath=0; shift;;
-  --toolchain) TOOLCHAIN=$2; shift;;
-  --tocmake) TOCMAKE="$TOCMAKE $2"; shift;;
-  --nobuild) NOBUILD=1;;
-  --plugin) PLUGIN=$2; shift;;
-  --properties) PROPERTIES_PATH=$2; _defaultPropertiesPath=0; shift;;
-  *) echo "Unknown parameter passed: $1" >&2; exit 1;;
+    -h|--help) mk::help; PLUGIN_ARGS+=("--help");;
+    -v|--verbose) VERBOSE=1; PLUGIN_ARGS+=("--verbose");;
+    --platform) PLATFORM=$2; PLUGIN_ARGS+=("--platform"); PLUGIN_ARGS+=("$2"); shift;;
+    --only) ONLY=$2; PLUGIN_ARGS+=("--only"); PLUGIN_ARGS+=("$2"); shift;;
+    --cleanup) DOCLEANUP=1; PLUGIN_ARGS+=("--cleanup");;
+    --test) DOTESTING=1; PLUGIN_ARGS+=("--test");;
+    --prefix) PREFIX=$2; _defaultPrefix=0; PLUGIN_ARGS+=("--prefix"); PLUGIN_ARGS+=("$2"); shift;;
+    --build-type) BUILD_TYPE=$2; _defaultBuildType=0; PLUGIN_ARGS+=("--build-type"); PLUGIN_ARGS+=("$2"); shift;;
+    --update-self) DOUPDATE=1;;
+    --version) DOVERSION=1;;
+    --version-short) DOSHORTVERSION=1;;
+    --source) SOURCE_PATH=$2; _defaultSourcePath=0; PLUGIN_ARGS+=("--source"); PLUGIN_ARGS+=("$2"); shift;;
+    --toolchain) TOOLCHAIN=$2; PLUGIN_ARGS+=("--toolchain"); PLUGIN_ARGS+=("$2"); shift;;
+    --to-cmake) TOCMAKE="$TOCMAKE $2"; PLUGIN_ARGS+=("--to-cmake"); PLUGIN_ARGS+=("$2"); shift;;
+    --no-build) NOBUILD=1; PLUGIN_ARGS+=("--no-build");;
+    --plugin) PLUGIN=$2; shift;;
+    --properties) PROPERTIES_PATH=$2; _defaultPropertiesPath=0; PLUGIN_ARGS+=("--properties"); PLUGIN_ARGS+=("$2"); shift;;
+    *) echo "Unknown parameter passed: $1" >&2; exit 1;;
   esac; shift; done
 
   if [[ $VERBOSE -eq 1 ]]; then
@@ -490,7 +497,7 @@ mk::try_run_plugin() {
       mk::exit 1
     fi
 
-    _cmd=($DOWNLOADED_PLUGINS_PATH/$PLUGIN $(pwd) $VERBOSE $PLATFORM)
+    _cmd=($DOWNLOADED_PLUGINS_PATH/$PLUGIN $(pwd) ${PLUGIN_ARGS[@]})
     "${_cmd[@]}"
     if [[ $? -ne 0 ]]; then
       mk::fail "FAILED(Run Plugin)\n"
@@ -647,7 +654,7 @@ mk::main() {
       done
     fi
   else
-    mk::debug "Flags for CMake:-DVERBOSE=$VERBOSE${PROPS[@]}${TOCMAKE[@]}$_cmakeBuildType} $SOURCE_PATH $_generator $VERBOSE_FLAG $_toolchainFlag;\n"
+    mk::debug "Flags for CMake:-DVERBOSE=$VERBOSE ${PROPS[*]} ${TOCMAKE[*]}${_cmakeBuildType} $SOURCE_PATH $_generator$VERBOSE_FLAG $_toolchainFlag;\n"
 
     eval cmake -DVERBOSE=$VERBOSE ${PROPS[@]} ${TOCMAKE[@]}$_cmakeBuildType $SOURCE_PATH $_generator $VERBOSE_FLAG $_toolchainFlag
     if [[ $? -ne 0 ]]; then
