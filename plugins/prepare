@@ -1,20 +1,65 @@
 #!/bin/bash
 
+# Stoned Fox's MK Script plugin which prepares local.properties and autodownloads
+# dependencies (if prepare script can be used) according mk.properties config found
+# in a project root.
+
+mk::help() {
+  echo "Stoned Fox's MK Script plugin which prepares local.properties and autodownloads"
+  echo "dependencies (if prepare script can be used) according mk.properties config found"
+  echo "in a project root."
+  echo ""
+  echo "Usage:"
+  echo ""
+  echo "  ./prepare /path/to/project/root [options]"
+  echo ""
+  echo "Options:"
+  echo "  -h, --help                        = show this help"
+  echo "  -v, --verbose                     = enable verbose mode (default is off)"
+  echo "  --platform <target-platform>      = specify target platform (e.g. msvc, macosx, linux)"
+  echo ""
+  echo "Examples:"
+  echo ""
+  echo "  ./prepare ~/src/my-project --verbose"
+  echo ""
+
+  exit 0
+}
+
 MYDIR="$(cd "$(dirname "$0")" && pwd)"
 
 source $MYDIR/commons.sh
 
-# @param project_root
-#   A project root folder (where MK script resides).
-# @param verbose_flag
-#   A verbose flag value.
-# @param target_platform
-#   A target platform name.
-mk::setup_properties() {
-  local _project_root=$1
-  VERBOSE=$2
-  local _target_platform=$3
+ROOT=${PWD}
+VERBOSE=0
+PLATFORM="auto"
+LEFTOVER_ARGS=()
 
+mk::parse_args() {
+  ROOT=$(mk::normalize_path $1)
+  shift 1
+
+  while [[ "$#" > 0 ]]; do case $1 in
+    -h|--help) mk::help;;
+    -v|--verbose) VERBOSE=1; LEFTOVER_ARGS+=("--verbose");;
+    --platform) PLATFORM=$2; LEFTOVER_ARGS+=("--platform"); LEFTOVER_ARGS+=("$2"); shift;;
+    *) LEFTOVER_ARGS+=("$1");;
+  esac; shift; done
+
+  mk::debug "VERBOSE mode is ON\n"
+  mk::debug "ROOT path is '$ROOT'\n"
+  mk::debug "PLATFORM is '$PLATFORM'\n"
+  mk::debug "LEFTOVER args are '${LEFTOVER_ARGS[*]}'\n"
+}
+
+mk::main() {
+  mk::info "= Executing $(mk::title 'MK Project Prepare') Plugin... =\n"
+
+  mk::parse_args $@
+
+  local _project_root=$ROOT
+
+  mk::info "Reading $(mk::bright existing) properties...\n"
   local _existing_props=()
   if [[ -e "$_project_root/local.properties" ]]; then
     mk::read_local_properties $_project_root/local.properties
@@ -40,11 +85,14 @@ mk::setup_properties() {
       break
     fi
   done
+  mk::done "DONE ($(mk::plane existing-properties))\n"
 
+  mk::info "Reading $(mk::bright properties config) file...\n"
   mk::read_local_properties $_project_root/mk.properties
+  mk::done "DONE ($(mk::plane properties-config))\n"
 
-  mk::debug "Walking properties list ${PROPS_LIST[*]}:\n"
-
+  mk::info "Setting $(mk::bright values) for each property:\n"
+  mk::debug "Properties list:\n${PROPS_LIST[*]}\n"
   for _prop_name in ${PROPS_LIST[@]}; do
     local _already_set=0
     for _existing in ${_existing_props[@]}; do
@@ -80,7 +128,7 @@ mk::setup_properties() {
       echo "# ${PROPS_TABLE[$_prop_name]}" >> $_project_root/local.properties
       echo "$_prop_name=\"$_prop_value\"" >> $_project_root/local.properties
 
-      PROPS_TABLE["$_prop_name"]="$_prop_value"
+      PROPS_TABLE[$_prop_name]="$_prop_value"
     fi
   done
 
@@ -99,11 +147,18 @@ mk::setup_properties() {
       mk::debug "$_table_key|$_table_val\n"
     done
   fi
+  mk::done "DONE ($(mk::plane values-setup))\n"
 
-  local _need_cleanup_cache=0
   if [[ "${#DEPENDENCIES_LIST[@]}" != 0 ]]; then
-    if [[ ! -d "$MYDIR/.cache" ]]; then
-      mkdir -p "$MYDIR/.cache"
+    mk::info "Preparing $(mk::bright dependencies):\n"
+
+    local _scripts_url=https://raw.githubusercontent.com/drjnmrh/mk-script/main/plugins/prepare-scripts
+    local _downloaded_path="$MYDIR/.cache"
+    local _need_cleanup_cache=0
+
+    if [[ ! -d "$_downloaded_path" ]]; then
+      mk::debug "Creating folder for temporary downloads '$_downloaded_path'\n"
+      mkdir -p "$_downloaded_path"
       if [[ $? -ne 0 ]]; then
         mk::warn "Failed to collect dependencies!\n"
         mk::exit 0
@@ -111,36 +166,27 @@ mk::setup_properties() {
       _need_cleanup_cache=1
     fi
 
-    if [[ ! -d "$MYDIR/.cache/prepare-scripts" ]]; then
-      pushd $MYDIR/.cache
-      git clone git@github.com:drjnmrh/prepare-scripts
-      if [[ $? -ne 0 ]]; then
-        popd
-
-        if [[ $_need_cleanup_cache -eq 1 ]]; then
-          rm -rf "$MYDIR/.cache"
-        fi
-
-        mk::warn "Failed to autocollect dependencies - do it manually :)\n"
-        mk::exit 0
-      fi
-      popd
-    fi
-
     mk::debug "Walking dependencies:\n"
     for _dependency in ${DEPENDENCIES_LIST[@]}; do
-      if [[ ! -e "$MYDIR/.cache/prepare-scripts/scripts/prepare-$_dependency.sh" ]]; then
-        mk::warn "No prepare script for dependency '$_dependency' was found - requires manual install.\n"
+      mk::debug "Trying to download prepare script for '$_dependency'\n"
+      pushd $_downloaded_path
+      curl -OL --fail $_scripts_url/prepare-$_dependency.sh
+      if [[ ! -e "prepare-$_dependency.sh" ]]; then
+        mk::warn "No prepare script for dependency '$_dependency' was found - manual install.\n"
+        popd
         continue
       fi
+      chmod +x prepare-$_dependency.sh
+      popd
 
+      mk::debug "Getting path to install dependency to\n"
       local _prefix_dir="$_thirdparty_dir"
       if [[ ! -d "$_prefix_dir" ]]; then
         read -r -p "Please, specify the folder to install '$_dependency' to: " _prefix_dir
       fi
 
-      mk::info "Autoinstalling '$_dependency' into '$_prefix_dir'...\n"
-      PATH=$MYDIR/.cache/prepare-scripts/scripts:$PATH prepare-$_dependency.sh --prefix $_prefix_dir
+      mk::info "Autoinstalling '$(mk::bright $_dependency)' into $(mk::plane $_prefix_dir)...\n"
+      PATH=$_downloaded_path:$PATH prepare-$_dependency.sh --prefix $_prefix_dir
       if [[ $? -ne 0 ]]; then
         mk::warn "FAILED, requires manual install!\n"
       else
@@ -149,12 +195,16 @@ mk::setup_properties() {
     done
 
     if [[ $_need_cleanup_cache -eq 1 ]]; then
-      rm -rf "$MYDIR/.cache"
+      mk::debug "Cleanup temporary downloads folder '$_downloaded_path'\n"
+      rm -rf "$_downloaded_path"
     fi
+    mk::done "DONE ($(mk::plane autoinstall))\n"
   fi
+
+  mk::done "DONE.\n"
 
   mk::exit 0
 }
 
-mk::setup_properties $@
+mk::main $@
 

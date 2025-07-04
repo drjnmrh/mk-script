@@ -1,113 +1,154 @@
 #!/bin/bash
 
+# Stoned Fox's MK Script plugin which cleans-up Git branches by getting
+# list of remote branches, comparing it with the list of local branches
+# and deleting excessive local branches.
+
+mk::help() {
+  echo "Stoned Fox's MK Script plugin which cleans-up Git branches by getting"
+  echo "list of remote branches, comparing it with the list of local branches"
+  echo "and deleting excessive local branches."
+  echo ""
+  echo "Usage:"
+  echo ""
+  echo "  ./git-branch-cleanup /path/to/project/root [options]"
+  echo ""
+  echo "Options:"
+  echo "  -h, --help                        = show this help"
+  echo "  -v, --verbose                     = enable verbose mode (default is off)"
+  echo "  --platform <target-platform>      = specify target platform (e.g. msvc, macosx, linux)"
+  echo ""
+  echo "Examples:"
+  echo ""
+  echo "  ./git-branch-cleanup ~/src/my-project --platform iphone"
+  echo ""
+
+  exit 0
+}
 
 MYDIR="$(cd "$(dirname "$0")" && pwd)"
 
 source $MYDIR/commons.sh
 
-ROOT=$1
-VERBOSE=$2
-PLATFORM=$3
+ROOT=${PWD}
+VERBOSE=0
+PLATFORM="auto"
+LEFTOVER_ARGS=()
 
-mk::info "Executing \033[33mGIT Branch Cleanup\033[34m Plugin...\n"
+mk::parse_args() {
+  ROOT=$(mk::normalize_path $1)
+  shift 1
 
-_branches=()
+  while [[ "$#" > 0 ]]; do case $1 in
+    -h|--help) mk::help;;
+    -v|--verbose) VERBOSE=1; LEFTOVER_ARGS+=("--verbose");;
+    --platform) PLATFORM=$2; LEFTOVER_ARGS+=("--platform"); LEFTOVER_ARGS+=("$2"); shift;;
+    *) LEFTOVER_ARGS+=("$1");;
+  esac; shift; done
 
-mk::info "Fetching new branches...\n"
-git fetch origin
-if [[ $? -ne 0 ]]; then
-    mk::fail "FAILED(New branches)\n"
-    mk::exit 1
-fi
-mk::done "DONE(New branches)\n"
+  mk::debug "VERBOSE mode is ON\n"
+  mk::debug "ROOT path is '$ROOT'\n"
+  mk::debug "PLATFORM is '$PLATFORM'\n"
+  mk::debug "LEFTOVER args are '${LEFTOVER_ARGS[*]}'\n"
+}
 
-mk::info "Pruning deleted branches...\n"
-git fetch --prune
-if [[ $? -ne 0 ]]; then
-    mk::fail "FAILED(Prune branches)\n"
-    mk::exit 1
-fi
-mk::done "DONE(Prune branches)\n"
+mk::main() {
+  mk::info "= Executing $(mk::title 'GIT Branch Cleanup') Plugin... =\n"
 
-mk::info "Get local branches list... "
-_tmp1=($(git branch -a | cut -c 3-))
-if [[ $? -ne 0 ]]; then
-    mk::fail "FAILED\n"
-    mk::exit 1
-fi
-mk::done "DONE\n"
+  mk::parse_args $@
 
-_remote_branches=()
-_local_branches=()
-for _bname in "${_tmp1[@]}"
-do
+  local _branches=()
+
+  cd $ROOT
+
+  mk::info "Fetching $(mk::bright new) branches...\n"
+  git fetch origin
+  mk::check_stage "new-branches"
+
+  mk::info "Pruning $(mk::bright deleted) branches...\n"
+  git fetch --prune
+  mk::check_stage "prune-branches"
+
+  mk::info "Get $(mk::bright 'local') branches list... "
+  _tmp1=($(git branch -a | cut -c 3-))
+  mk::check_stage "local-branches"
+
+  _remote_branches=()
+  _local_branches=()
+  for _bname in "${_tmp1[@]}"
+  do
     if [[ "$_bname" == "main" ]]; then
-        continue
+      continue
     fi
 
     if [[ "$_bname" == "origin/main" ]]; then
-        continue
+      continue
     fi
 
     if [[ "$_bname" == "master" ]]; then
-        continue
+      continue
     fi
 
     if [[ "$_bname" == "origin/master" ]]; then
-        continue
+      continue
     fi
 
     if [[ "$_bname" == "->" ]]; then
-        continue
+      continue
     fi
 
     if [[ "$_bname" == "remotes/origin/HEAD" ]]; then
-        continue
+      continue
     fi
 
     if [[ "$_bname" == "remotes/origin/main" ]]; then
-        continue
+      continue
     fi
 
     if [[ "$_bname" == "remotes/origin/master" ]]; then
-        continue
+      continue
     fi
 
     if [[ "$_bname" == remotes/origin/* ]]; then
-        mk::debug "REMOTE BRANCH : $_bname\n"
-        _remote_branches+=("$_bname")
+      mk::debug "REMOTE BRANCH : $_bname\n"
+      _remote_branches+=("$_bname")
     else
-        mk::debug "LOCAL BRANCH  : $_bname\n"
-        _local_branches+=("$_bname")
+      mk::debug "LOCAL BRANCH  : $_bname\n"
+      _local_branches+=("$_bname")
     fi
-done
+  done
 
-for _l in "${_local_branches[@]}"
-do
+  for _l in "${_local_branches[@]}"
+  do
     _should_remove=1
     for _r in "${_remote_branches[@]}"
     do
-        if [[ "$_r" == "remotes/origin/$_l" ]]; then
-            _should_remove=0
-            break
-        fi
+      if [[ "$_r" == "remotes/origin/$_l" ]]; then
+        _should_remove=0
+        break
+      fi
     done
 
     if [[ $_should_remove -eq 1 ]]; then
-        read -rn1 -p "Should remove '$_l' (y/n): " _answer
-        if [[ "$_answer" == "y" ]]; then
-            mk::info " Removing '$_l': "
-            git branch -D $_l > /dev/null 2>&1
-            if [[ $? -ne 0 ]]; then
-                mk::fail "FAILED(Delete $_l)\n"
-            else
-                mk::done "DONE(Delete $_l)\n"
-            fi
+      read -rn1 -p "Should remove '$_l' (y/n): " _answer
+      if [[ "$_answer" == "y" ]]; then
+        mk::info " Removing '$_l': "
+        git branch -D $_l > /dev/null 2>&1
+        if [[ $? -ne 0 ]]; then
+          mk::fail "FAILED(Delete $_l)\n"
         else
-            mk::info " Skipping\n"
+          mk::done "DONE(Delete $_l)\n"
         fi
+      else
+        mk::info " Skipping\n"
+      fi
     fi
-done
+  done
 
-mk::exit 0
+  mk::done "DONE.\n"
+
+  mk::exit 0
+}
+
+mk::main $@
 

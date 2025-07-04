@@ -1,0 +1,128 @@
+#!/bin/bash
+
+# Stoned Fox's MK Script plugin which uses common scripts, sets up the MK to use them
+# and executes MK with suitable flags for the specified project.
+# Desired toolchain is derived from the --platform parameter value.
+
+mk::help() {
+  echo "Stoned Fox's MK Script plugin which uses common scripts, sets up the MK to use them"
+  echo "and executes MK with suitable flags for the specified project."
+  echo "Desired toolchain is derived from the --platform parameter value."
+  echo ""
+  echo "List of supported toolchains: wine-nvcc, gcc-14.1."
+  echo "If specified platform is not present in the list above, then no specific toolchain"
+  echo "is used, MK script will be executed normally."
+  echo ""
+  echo "The plugin will try to download toolchain scripts from the repo into the folder"
+  echo "/path/to/project/.mk-plugins/toolchain-scripts. If script in question is already"
+  echo "in the folder, plugin will skip the download. Path to CMake scripts will be passed"
+  echo "by the plugin automatically to the MK script as a CMake variable \033[32mMK_UTILS_DIR\033[0m."
+  echo "Project can use this variable as an option in its CMakeLists.txt to include Utils"
+  echo "CMake script from the toolchain scripts (if needed)."
+  echo ""
+  echo "Usage:"
+  echo ""
+  echo "  ./toolchain /path/to/project/root [options]"
+  echo ""
+  echo "Options:"
+  echo "  -h, --help                        = show this help"
+  echo "  -v, --verbose                     = enable verbose mode (default is off)"
+  echo "  --platform <target-platform>      = specify target platform (default is 'auto')"
+  echo ""
+  echo "Examples:"
+  echo ""
+  echo "  ./toolchain ~/src/my-project --verbose --platform wine-msvc"
+  echo ""
+
+  exit 0
+}
+
+MYDIR="$(cd "$(dirname "$0")" && pwd)"
+
+source $MYDIR/commons.sh
+
+ROOT=${PWD}
+VERBOSE=0
+PLATFORM="auto"
+LEFTOVER_ARGS=()
+
+declare -A TOOLCHAIN_TABLE
+TOOLCHAIN_TABLE["wine-msvc"]="Wine-MSVC-toolchain.cmake"
+TOOLCHAIN_TABLE["gcc-14.1"]="Gcc-14.1.0-toolchain.cmake"
+
+TOOLCHAIN_SCRIPTS=("fix-compile-commands.py" "Utils.cmake")
+
+mk::parse_args() {
+  ROOT=$(mk::normalize_path $1)
+  shift 1
+
+  while [[ "$#" > 0 ]]; do case $1 in
+    -h|--help) mk::help;;
+    -v|--verbose) VERBOSE=1; LEFTOVER_ARGS+=("--verbose");;
+    --platform) PLATFORM=$2; LEFTOVER_ARGS+=("--platform"); LEFTOVER_ARGS+=("$2"); shift;;
+    *) LEFTOVER_ARGS+=("$1");;
+  esac; shift; done
+
+  mk::debug "VERBOSE mode is ON\n"
+  mk::debug "ROOT path is '$ROOT'\n"
+  mk::debug "PLATFORM is '$PLATFORM'\n"
+  mk::debug "LEFTOVER args are '${LEFTOVER_ARGS[*]}'\n"
+}
+
+mk::main() {
+  mk::info "==== Executing $(mk::title 'MK Toolchain') Plugin... ====\n"
+
+  mk::parse_args $@
+
+  local _scripts_dir="$MYDIR/toolchain-scripts"
+  local _scripts_url=https://raw.githubusercontent.com/drjnmrh/mk-script/main/plugins/toolchain-scripts
+
+  mk::mkdir_if_needed $_scripts_dir
+
+  mk::debug "Checking which script to download\n"
+  mk::pushd "$_scripts_dir"
+  for _script_name in ${TOOLCHAIN_SCRIPTS[@]}; do
+    if [[ ! -e "$_script_name" ]]; then
+      mk::info "Download $(mk::title $_script_name) script:\n"
+      curl -OL --fail $_scripts_url/$_script_name
+      if [[ ! -e "$_script_name" ]]; then
+        mk::warn "Failed to download script - configuration might be faulty.\n"
+      else
+        mk::done "DONE ($(mk::plane download-$_script_name))\n"
+      fi
+    fi
+  done
+
+  local _platform=$(echo $PLATFORM | tr A-Z a-z)
+  mk::debug "Checking if needs to download toolchain for '$_platform'\n"
+  local _toolchain=${TOOLCHAIN_TABLE[$_platform]}
+  if [[ ! -z "$_toolchain" ]]; then
+    if [[ ! -e "$_toolchain" ]]; then
+      mk::info "Download $(mk::title $_toolchain) toolchain script:\n"
+      curl -OL --fail $_scripts_url/$_toolchain
+      mk::check_stage "download-$_toolchain"
+    fi
+  fi
+  mk::popd
+
+  mk::pushd $ROOT
+  mk::info "Running $(mk::title 'MK Script') using $(mk::bright $_toolchain) toolchain...\n"
+  mk::debug "Working dir: $(pwd)\n"
+  mk::debug "MK args: ${LEFTOVER_ARGS[*]}\n"
+  if [[ ! -e "mk" ]]; then
+    mk::err "MK Script not found in $(pwd)\n"
+    mk::fail "FAILED ($(mk::plane mk-run))\n"
+    mk::exit 1
+  fi
+
+  local _cmd=(--toolchain $_scripts_dir/$_toolchain --to-cmake -DMK_UTILS_DIR=$_scripts_dir ${LEFTOVER_ARGS[@]})
+  mk::debug "RUNNING ${_cmd[*]}\n"
+  PATH=$(pwd):$PATH mk ${_cmd[@]}
+  mk::check_stage "mk-run"
+  mk::popd
+
+  mk::exit 0
+}
+
+mk::main $@
+
