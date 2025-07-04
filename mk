@@ -476,19 +476,19 @@ mk::fetch_plugins_script() {
 }
 
 mk::try_run_plugin() {
-  if [[ $DOCLEANUP -eq 1 ]]; then
-    if [[ -d "$DOWNLOADED_PLUGINS_PATH" ]]; then
-      mk::info "Cleanup downloaded plugins... "
-      rm -rf $DOWNLOADED_PLUGINS_PATH
-      if [[ $? -ne 0 ]]; then
-        mk::warn "FAILED(Plugins Cleanup)\n"
-      else
-        mk::done "DONE(Plugins Cleanup)\n"
+  if [[ ! -z "$PLUGIN" ]]; then
+    if [[ $DOCLEANUP -eq 1 ]]; then
+      if [[ -d "$DOWNLOADED_PLUGINS_PATH" ]]; then
+        mk::info "Cleanup downloaded plugins... "
+        rm -rf $DOWNLOADED_PLUGINS_PATH
+        if [[ $? -ne 0 ]]; then
+          mk::warn "FAILED(Plugins Cleanup)\n"
+        else
+          mk::done "DONE(Plugins Cleanup)\n"
+        fi
       fi
     fi
-  fi
 
-  if [[ ! -z "$PLUGIN" ]]; then
     mk::fetch_plugins_script commons.sh
     mk::fetch_plugins_script $PLUGIN
     chmod +x $DOWNLOADED_PLUGINS_PATH/$PLUGIN
