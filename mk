@@ -2,6 +2,9 @@
 
 # CHANGELOG
 #
+# v1.1.1
+# - Add ```--to-ctest``` param to pass flags to _ctest_ tool.
+#
 # v1.1.0
 # - Change how parameters are passed to plugins.
 # - Renamed --tocmake and --nobuild flags to --to-cmake and --no-build correspondingly.
@@ -58,7 +61,7 @@
 # v1.0.0
 # - Implement basic functionality: generate using cmake, build, test
 
-VERSION="1.1.0"
+VERSION="1.1.1"
 
 PLATFORM="auto"
 OLDWD=$(pwd)
@@ -249,6 +252,7 @@ mk::help() {
   echo "  --source <path/to/script>         = specify path to the main CMakeLists.txt script (default: $MYDIR/sources)"
   echo "  --toolchain <path/to/toolchain>   = specify path to the CMake toolchain file"
   echo "  --to-cmake <CMake flag>           = specify CMake flag to be passed to the generator (e.g. -DIOS_TYPE=iphone)"
+  echo "  --to-ctest <CTest flag>           = add a CTest flag to the flags, passed to the tool (e.g. --progress)"
   echo "  --no-build                        = skip build step"
   echo "  --plugin <plugin-name>            = run specific plugin"
   echo "  --properties <path/to/properties> = specify path to local.properties file (default: ${PWD})."
@@ -275,6 +279,7 @@ PROPERTIES_PATH="$DEFAULT_PROPERTIES_PATH"
 SOURCE_PATH="$DEFAULT_SOURCE_PATH"
 TOOLCHAIN="null"
 TOCMAKE=""
+TOCTEST=()
 ANDROIDABI=(armeabi-v7a arm64-v8a x86_64)
 NOBUILD=0
 PLUGIN=""
@@ -323,6 +328,7 @@ mk::parse_args() {
     --source) SOURCE_PATH=$2; _defaultSourcePath=0; PLUGIN_ARGS+=("--source"); PLUGIN_ARGS+=("$2"); shift;;
     --toolchain) TOOLCHAIN=$2; PLUGIN_ARGS+=("--toolchain"); PLUGIN_ARGS+=("$2"); shift;;
     --to-cmake) TOCMAKE="$TOCMAKE $2"; PLUGIN_ARGS+=("--to-cmake"); PLUGIN_ARGS+=("$2"); shift;;
+    --to-ctest) TOCTEST+=("$2"); PLUGIN_ARGS+=("--to-ctest"); PLUGIN_ARGS+=("$2"); shift;;
     --no-build) NOBUILD=1; PLUGIN_ARGS+=("--no-build");;
     --plugin) PLUGIN=$2; shift;;
     --properties) PROPERTIES_PATH=$2; _defaultPropertiesPath=0; PLUGIN_ARGS+=("--properties"); PLUGIN_ARGS+=("$2"); shift;;
@@ -674,14 +680,15 @@ mk::main() {
   fi
 
   if [[ $DOTESTING -eq 1 ]]; then
+    mk::debug "CTEST ARGS are ${TOCTEST[*]}; \n"
     if [[ $ONLY == "" ]]; then
-      ctest --verbose --timeout 300${_ctestConfigType[@]}
+      ctest --timeout 300${_ctestConfigType[@]} ${TOCTEST[*]}
     else
       tmp=${ONLY//"::"/$'\2'}
       IFS=$'\2' read -a arr <<< "$tmp"
       ONLY=${arr[0]}
       TEST=${arr[1]}
-      TEST_ARGUMENTS=$TEST ctest --verbose --timeout 300${_ctestConfigType[@]} -R $ONLY
+      TEST_ARGUMENTS=$TEST ctest --timeout 300${_ctestConfigType[@]} ${TOCTEST[*]} -R $ONLY
     fi
     if [[ $? -ne 0 ]]; then
       mk::fail "FAILED(Test)\n"
