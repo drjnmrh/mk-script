@@ -45,6 +45,7 @@ ROOT=${PWD}
 VERBOSE=0
 PLATFORM="auto"
 LEFTOVER_ARGS=()
+TOCTEST=()
 
 declare -A TOOLCHAIN_TABLE
 TOOLCHAIN_TABLE["wine-msvc"]="Wine-MSVC-toolchain.cmake"
@@ -60,6 +61,7 @@ mk::parse_args() {
     -h|--help) mk::help;;
     -v|--verbose) VERBOSE=1; LEFTOVER_ARGS+=("--verbose");;
     --platform) PLATFORM=$2; LEFTOVER_ARGS+=("--platform"); LEFTOVER_ARGS+=("$2"); shift;;
+    --to-ctest) TOCTEST+=("--to-ctest"); TOCTEST+=("$2"); shift;;
     *) LEFTOVER_ARGS+=("$1");;
   esac; shift; done
 
@@ -115,7 +117,7 @@ mk::main() {
     mk::exit 1
   fi
 
-  local _cmd=(--toolchain $_scripts_dir/$_toolchain --to-cmake -DMK_UTILS_DIR=$_scripts_dir ${LEFTOVER_ARGS[@]})
+  local _cmd=(--toolchain $_scripts_dir/$_toolchain --to-cmake -DMK_UTILS_DIR=$_scripts_dir ${TOCTEST[@]} ${LEFTOVER_ARGS[@]})
   mk::debug "RUNNING ${_cmd[*]}\n"
   PATH=$(pwd):$PATH mk ${_cmd[@]}
   mk::check_stage "mk-run"
