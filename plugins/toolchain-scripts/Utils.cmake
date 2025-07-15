@@ -5,7 +5,7 @@ define_property(TARGET PROPERTY ATTACHED_ASSETS
 function(set_common_flags inTargetName)
     if (MSVC)
         target_compile_options(${inTargetName} PRIVATE
-            -W4 -WX -MD
+          -W4 -WX -MD /arch:AVXX2 /arch:AVX512
         )
 
         target_compile_definitions(${inTargetName} PRIVATE
@@ -13,7 +13,7 @@ function(set_common_flags inTargetName)
         )
     else()
         target_compile_options(${inTargetName} PRIVATE
-            -Wall -Werror -Wunused-variable -static-libstdc++
+            -Wall -Werror -Wunused-variable -static-libstdc++ -mavx2
         )
     endif()
 
