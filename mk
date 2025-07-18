@@ -2,6 +2,10 @@
 
 # CHANGELOG
 #
+# v1.1.2
+# - Add ```--cleanup-plugins``` flag to cleanup ```.mk-plugins``` folder.
+# - Make ```--cleanup``` to skip cleaning of the downloaded plugins folder.
+#
 # v1.1.1
 # - Add ```--to-ctest``` param to pass flags to _ctest_ tool.
 #
@@ -61,7 +65,7 @@
 # v1.0.0
 # - Implement basic functionality: generate using cmake, build, test
 
-VERSION="1.1.1"
+VERSION="1.1.2"
 
 PLATFORM="auto"
 OLDWD=$(pwd)
@@ -243,6 +247,7 @@ mk::help() {
   echo "  -v, --verbose                     = enable verbose mode (default is off)"
   echo "  --platform <target-platform>      = specify target platform (msvc, macosx, linux, iphone, android, emsdk)"
   echo "  --cleanup                         = perform project cleanup"
+  echo "  --cleanup-plugins                 = perform cleanup of the downloaded plugins"
   echo "  --test                            = perform testing (performs build if needed)"
   echo "  --only <target-name>              = perform testing for the selected build target"
   echo "  --build-type <type>               = set build type: Release(default), Debug, RelWithDebInfo, MinSizeRel"
@@ -267,6 +272,7 @@ mk::help() {
 
 
 DOCLEANUP=0
+DOCLEANUP_PLUGINS=0
 DOTESTING=0
 ONLY=""
 BUILD_TYPE="Release"
@@ -319,6 +325,7 @@ mk::parse_args() {
     --platform) PLATFORM=$2; PLUGIN_ARGS+=("--platform"); PLUGIN_ARGS+=("$2"); shift;;
     --only) ONLY=$2; PLUGIN_ARGS+=("--only"); PLUGIN_ARGS+=("$2"); shift;;
     --cleanup) DOCLEANUP=1; PLUGIN_ARGS+=("--cleanup");;
+    --cleanup-plugins) DOCLEANUP_PLUGINS=1; PLUGIN_ARGS+=("--cleanup-plugins");;
     --test) DOTESTING=1; PLUGIN_ARGS+=("--test");;
     --prefix) PREFIX=$2; _defaultPrefix=0; PLUGIN_ARGS+=("--prefix"); PLUGIN_ARGS+=("$2"); shift;;
     --build-type) BUILD_TYPE=$2; _defaultBuildType=0; PLUGIN_ARGS+=("--build-type"); PLUGIN_ARGS+=("$2"); shift;;
@@ -483,7 +490,7 @@ mk::fetch_plugins_script() {
 
 mk::try_run_plugin() {
   if [[ ! -z "$PLUGIN" ]]; then
-    if [[ $DOCLEANUP -eq 1 ]]; then
+    if [[ $DOCLEANUP_PLUGINS -eq 1 ]]; then
       if [[ -d "$DOWNLOADED_PLUGINS_PATH" ]]; then
         mk::info "Cleanup downloaded plugins... "
         rm -rf $DOWNLOADED_PLUGINS_PATH
