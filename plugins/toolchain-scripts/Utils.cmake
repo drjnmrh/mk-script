@@ -13,7 +13,7 @@ function(set_common_flags inTargetName)
         )
     else()
         target_compile_options(${inTargetName} PRIVATE
-            -Wall -Werror -Wunused-variable -static-libstdc++ -mavx2
+            -Wall -Werror -Wunused-variable -static-libstdc++ -mavx2 -mavx512f -mavx512vl -mavx512dq
         )
     endif()
 
